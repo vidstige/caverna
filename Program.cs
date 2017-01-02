@@ -37,13 +37,12 @@ namespace ConsoleApplication
 
     }
     
-    // TODO: Call Area?
-    class PlayerState
+    class Area
     {
         private List<Dwarf> _dwarfs = new List<Dwarf>();
         private IPlayer _player;
 
-        public PlayerState(IPlayer player)
+        public Area(IPlayer player)
         {
             _player = player;
         }
@@ -62,7 +61,7 @@ namespace ConsoleApplication
 
         public void EndTurn() { _turn++; }
 
-        public int Score(PlayerState area)
+        public int Score(Area area)
         {
             return 0;
         }
@@ -72,7 +71,7 @@ namespace ConsoleApplication
     {
         public static void Main(string[] args)
         {
-            PlayerState[] players = new []{ new PlayerState(new RandomPlayer("X")), new PlayerState(new RandomPlayer("Y")) };
+            Area[] players = new []{ new Area(new RandomPlayer("X")), new Area(new RandomPlayer("Y")) };
             var game = new Game();
 
             while (game.InProgress)
