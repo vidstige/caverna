@@ -6,7 +6,14 @@ namespace ConsoleApplication
 {
     class DwarfAction
     {
-        public static DwarfAction Nothing = new DwarfAction(); // Just for testing
+        private readonly string _name;
+        public DwarfAction(string name)
+        {
+            _name = name;
+        }
+        public string Name { get { return _name; } }
+        public static DwarfAction Nothing = new DwarfAction("Nothing 1"); // Just for testing
+        public static DwarfAction Nothing2 = new DwarfAction("Nothing 2"); // Just for testing
     }
 
     interface IPlayer
@@ -47,10 +54,11 @@ namespace ConsoleApplication
         public Area(IPlayer player)
         {
             _player = player;
-            _dwarfs.Add(new Dwarf());
+            //_dwarfs.Add(new Dwarf());
             _dwarfs.Add(new Dwarf());
         }
         
+        public IReadOnlyList<Dwarf> Dwarfs { get { return _dwarfs; } }
         public IPlayer Player { get { return _player; } }
     }
 
@@ -65,16 +73,21 @@ namespace ConsoleApplication
         public Game(IEnumerable<IPlayer> players)
         {
             _areas = players.Select(p => new Area(p)).ToList();
+            _available.Add(DwarfAction.Nothing);
+            _available.Add(DwarfAction.Nothing2);
         }
 
         public IReadOnlyList<Area> Areas { get { return _areas; } }
 
         public bool InProgress { get { return _turn < 1; } }
         public int Turn { get { return _turn; } }
-        
-
 
         public void EndTurn() { _turn++; }
+
+        public Dwarf NextDwarf(Area area)
+        {
+            return area.Dwarfs.Where(dwarf => !_occupiedBy.Values.Contains(dwarf)).FirstOrDefault();
+        }
 
         public int Score(Area area)
         {
@@ -93,9 +106,12 @@ namespace ConsoleApplication
                     didPlace = false;
                     foreach (var area in Areas)
                     {
-                        if (false) {
-                            var options = new DwarfAction[] { DwarfAction.Nothing };
-                            area.Player.PlaceDwarf(options);
+                        var dwarf = NextDwarf(area);
+                        if (dwarf != null) {
+                            var options = _available.Where(a => !_occupiedBy.ContainsKey(a));
+                            var action =  area.Player.PlaceDwarf(options);
+                            Console.WriteLine("{0} placing dwarf on {1}", area.Player.Name, action.Name);
+                            _occupiedBy[action] = dwarf;
                             didPlace = true;
                         }
                     }
