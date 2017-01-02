@@ -79,10 +79,16 @@ namespace ConsoleApplication
 
         public IReadOnlyList<Area> Areas { get { return _areas; } }
 
-        public bool InProgress { get { return _turn < 1; } }
+        public bool InProgress { get { return _turn < 2; } }
         public int Turn { get { return _turn; } }
 
-        public void EndTurn() { _turn++; }
+        public void EndTurn()
+        {
+            // Return dwarf tokens to play Areas
+            _occupiedBy.Clear();
+
+            _turn++;
+        }
 
         public Dwarf NextDwarf(Area area)
         {
@@ -110,6 +116,10 @@ namespace ConsoleApplication
                         if (dwarf != null) {
                             var options = _available.Where(a => !_occupiedBy.ContainsKey(a));
                             var action =  area.Player.PlaceDwarf(options);
+                            if (!options.Contains(action))
+                            {
+                                throw new Exception("Player made an illegal move.");
+                            }
                             Console.WriteLine("{0} placing dwarf on {1}", area.Player.Name, action.Name);
                             _occupiedBy[action] = dwarf;
                             didPlace = true;
