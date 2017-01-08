@@ -4,12 +4,26 @@ using System.Collections.Generic;
 
 namespace ConsoleApplication
 {
+    class Token
+    {
+           public static Token Stone = new Token();
+           public static Token Wood = new Token();
+           public static Token Food = new Token();
+           public static Token Coal = new Token();
+           public static Token Gold = new Token();
+    }
+
     class DwarfAction
     {
         private readonly string _name;
-        public DwarfAction(string name)
+        private readonly Dictionary<Token, int> _initial;
+        private readonly Dictionary<Token, int> _replenish;
+        
+        public DwarfAction(string name, Dictionary<Token, int> initial, Dictionary<Token, int> replenish)
         {
             _name = name;
+            _initial = initial;
+            _replenish = replenish;
         }
         public string Name { get { return _name; } }
 
@@ -19,7 +33,7 @@ namespace ConsoleApplication
             {
                 case 2:
                     return new List<DwarfAction> {
-                        DriftMining,
+                        DriftMining(),
                         Logging,
                         WoodGathering,
                         Excavation,
@@ -32,15 +46,18 @@ namespace ConsoleApplication
             }
             throw new Exception("Bad nmumber of players");
         }
-        public static DwarfAction DriftMining = new DwarfAction("Drift Mining");
-        public static DwarfAction Logging = new DwarfAction("Logging");
-        public static DwarfAction WoodGathering = new DwarfAction("Wood Gathering");
-        public static DwarfAction Excavation = new DwarfAction("Excavation");
-        public static DwarfAction Supplies = new DwarfAction("Supplies");
-        public static DwarfAction Clearing = new DwarfAction("Clearing");
-        public static DwarfAction StartingPlayer = new DwarfAction("StartingPlayer");
-        public static DwarfAction OreMining = new DwarfAction("OreMining");
-        public static DwarfAction Sustenance = new DwarfAction("Sustenance");
+        public static DwarfAction DriftMining() {
+            return new DwarfAction("Drift Mining", new Dictionary<Token, int>(), new Dictionary<Token, int>{{Token.Stone, 1}});
+        }
+
+        public static DwarfAction Logging = new DwarfAction("Logging", null, null);
+        public static DwarfAction WoodGathering = new DwarfAction("Wood Gathering", null, null);
+        public static DwarfAction Excavation = new DwarfAction("Excavation", null, null);
+        public static DwarfAction Supplies = new DwarfAction("Supplies", null, null);
+        public static DwarfAction Clearing = new DwarfAction("Clearing", null, null);
+        public static DwarfAction StartingPlayer = new DwarfAction("StartingPlayer", null, null);
+        public static DwarfAction OreMining = new DwarfAction("OreMining", null, null);
+        public static DwarfAction Sustenance = new DwarfAction("Sustenance", null, null);
     }
 
     interface IPlayer
