@@ -12,8 +12,35 @@ namespace ConsoleApplication
             _name = name;
         }
         public string Name { get { return _name; } }
-        public static DwarfAction Nothing = new DwarfAction("Nothing 1"); // Just for testing
-        public static DwarfAction Nothing2 = new DwarfAction("Nothing 2"); // Just for testing
+
+        public static List<DwarfAction> ForPlayers(int n) 
+        {
+            switch (n)
+            {
+                case 2:
+                    return new List<DwarfAction> {
+                        DriftMining,
+                        Logging,
+                        WoodGathering,
+                        Excavation,
+                        Supplies,
+                        Clearing,
+                        StartingPlayer,
+                        OreMining,
+                        Sustenance
+                    };
+            }
+            throw new Exception("Bad nmumber of players");
+        }
+        public static DwarfAction DriftMining = new DwarfAction("Drift Mining");
+        public static DwarfAction Logging = new DwarfAction("Logging");
+        public static DwarfAction WoodGathering = new DwarfAction("Wood Gathering");
+        public static DwarfAction Excavation = new DwarfAction("Excavation");
+        public static DwarfAction Supplies = new DwarfAction("Supplies");
+        public static DwarfAction Clearing = new DwarfAction("Clearing");
+        public static DwarfAction StartingPlayer = new DwarfAction("StartingPlayer");
+        public static DwarfAction OreMining = new DwarfAction("OreMining");
+        public static DwarfAction Sustenance = new DwarfAction("Sustenance");
     }
 
     interface IPlayer
@@ -73,8 +100,7 @@ namespace ConsoleApplication
         public Game(IEnumerable<IPlayer> players)
         {
             _areas = players.Select(p => new Area(p)).ToList();
-            _available.Add(DwarfAction.Nothing);
-            _available.Add(DwarfAction.Nothing2);
+            _available = DwarfAction.ForPlayers(players.Count());
         }
 
         public IReadOnlyList<Area> Areas { get { return _areas; } }
@@ -105,6 +131,8 @@ namespace ConsoleApplication
             while (InProgress)
             {
                 Console.WriteLine("Starting turn " + Turn);
+                // Replenish
+
                 // Action phase
                 bool didPlace;
                 do
@@ -126,7 +154,7 @@ namespace ConsoleApplication
                         }
                     }
                 } while (didPlace);
-
+                
                 // Harvest phase
 
                 EndTurn();
