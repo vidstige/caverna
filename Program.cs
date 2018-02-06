@@ -46,18 +46,51 @@ namespace ConsoleApplication
             }
             throw new Exception("Bad nmumber of players");
         }
+
+        private static Dictionary<Token, int> None = new Dictionary<Token, int>();
+
         public static DwarfAction DriftMining() {
-            return new DwarfAction("Drift Mining", new Dictionary<Token, int>(), new Dictionary<Token, int>{{Token.Stone, 1}});
+            return new DwarfAction("Drift Mining", None, new Dictionary<Token, int>{{Token.Stone, 1}});
         }
 
-        public static DwarfAction Logging = new DwarfAction("Logging", null, null);
-        public static DwarfAction WoodGathering = new DwarfAction("Wood Gathering", null, null);
-        public static DwarfAction Excavation = new DwarfAction("Excavation", null, null);
-        public static DwarfAction Supplies = new DwarfAction("Supplies", null, null);
-        public static DwarfAction Clearing = new DwarfAction("Clearing", null, null);
-        public static DwarfAction StartingPlayer = new DwarfAction("StartingPlayer", null, null);
-        public static DwarfAction OreMining = new DwarfAction("OreMining", null, null);
-        public static DwarfAction Sustenance = new DwarfAction("Sustenance", null, null);
+        public static DwarfAction Logging() 
+        {
+            return new DwarfAction("Logging", new Dictionary<Token, int>{{Token.Wood, 3}}, new Dictionary<Token, int>{{Token.Wood, 1}});
+        }
+        public static DwarfAction WoodGathering()
+        {
+            return  new DwarfAction("Wood Gathering", None, new Dictionary<Token, int>{{Token.Wood, 1}});
+        }
+        public static DwarfAction Excavation()
+        {
+            return new DwarfAction("Excavation", None, new Dictionary<Token, int>{{Token.Stone, 1}});
+        }
+        public static DwarfAction Supplies()
+        {
+            return new DwarfAction("Supplies", None, new Dictionary<Token, int>{
+                {Token.Stone, 1},
+                {Token.Wood, 1},
+                {Token.Food, 1},
+                {Token.Coal, 1},
+                {Token.Gold, 2}
+            });
+        }
+        public static DwarfAction Clearing()
+        {
+            return new DwarfAction("Clearing", None, new Dictionary<Token, int>{{Token.Wood, 1}});
+        }
+        public static DwarfAction StartingPlayer()
+        {
+            return new DwarfAction("StartingPlayer", None, new Dictionary<Token, int>{{Token.Coal, 1}});
+        }
+        public static DwarfAction OreMining()
+        {
+            return new DwarfAction("OreMining", new Dictionary<Token, int>{{Token.Coal, 2}}, new Dictionary<Token, int>{{Token.Coal, 1}});
+        }
+        public static DwarfAction Sustenance()
+        {
+            return new DwarfAction("Sustenance", None, new Dictionary<Token, int>{{Token.Coal, 1}});
+        }
     }
 
     interface IPlayer
