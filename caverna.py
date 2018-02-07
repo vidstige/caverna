@@ -94,7 +94,9 @@ class Game(object):
 
     def score(self, player):
         print(player.resources)
-        return player.resources.get('coins', 0) + (len(player.tiles) - 24)
+        return player.resources.get('coins', 0) + \
+            (len(player.tiles) - 24) + \
+            len(player.dwarfs)
 
 
 def available_actions(game, state=None):
