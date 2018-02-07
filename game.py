@@ -10,28 +10,21 @@ def main():
         print("Round {}".format(game.state.round))
 
         # Replenish resources (this is done first to ensure initial supply)
-        for action in game.actions:
-            for resource, rc in action.resources.items():
-                initial, per_round = rc
-                current = game.state.action_resources.get(action, {})
-                if resource in current:
-                    current[resource] += per_round
-                else:
-                    current[resource] = initial
-                game.state.action_resources[action] = current
+        game.replenish()
 
-        # Take actions
-        for name, player in game.players.items():
-            if player.dwarfs:
-                dwarf = player.dwarfs.pop()
-                action = controllers[player].select_action(game)
-                print("{} selects {}".format(name, action.name))
-                
-                # place dwarf
-                game.state.dwarfs[action] = (player, dwarf)
-                
-                # gain resources
-                game.gain_resources(action, player)
+        # Take actions while any player has dwarfs
+        while any(p.dwarfs for p in game.players.values()):
+            for name, player in game.players.items():
+                if player.dwarfs:
+                    dwarf = player.dwarfs.pop()
+                    action = controllers[player].select_action(game)
+                    print("{} selects {}".format(name, action.name))
+                    
+                    # place dwarf
+                    game.state.dwarfs[action] = (player, dwarf)
+                    
+                    # gain resources
+                    game.gain_resources(action, player)
 
         # Return dwarfs
         game.return_dwarfs()
