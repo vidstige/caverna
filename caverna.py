@@ -6,9 +6,9 @@ class Player(object):
         self.resources = dict(food=2)
 
 class Action(object):
-    def __init__(self, name, r):
+    def __init__(self, name, resources):
         self.name = name
-        self.resources = r
+        self.resources = resources
 
 
 class Game(object):
@@ -17,12 +17,14 @@ class Game(object):
         def __init__(self, players):
             self.players = players
             self.round = 0
-
+            self.dwarfs = {}  # placed dwarfs
 
     def __init__(self, players):
-        self.actions = [Action(name="Drift Mining", r=dict(stones=1))]
+        self.actions = [
+            Action("Drift Mining", dict(stones=(1, 1))),
+            Action("Logging", dict(wood=(3, 1))),
+        ]
         self.state = Game.State(players)
-        self.dwarfs = {}  # placed dwarfs
 
     def players(self):
         return self.state.players.values()
@@ -47,10 +49,10 @@ def main():
             if player.dwarfs:
                 dwarf = player.dwarfs.pop()
                 action = controllers[player].select_action()
-                game.dwarfs[action] = (player, dwarf)
+                game.state.dwarfs[action] = (player, dwarf)
 
         # Return dwarfs
-        for player, dwarf in game.dwarfs.values():
+        for player, dwarf in game.state.dwarfs.values():
             player.dwarfs.append(dwarf)
         game.dwarfs = {}
 
