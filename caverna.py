@@ -23,6 +23,10 @@ class Game(object):
         self.actions = [
             Action("Drift Mining", dict(stones=(1, 1))),
             Action("Logging", dict(wood=(3, 1))),
+            Action("Wood Gathering", dict(wood=(1, 1))),
+            Action("Excavation", dict(stone=(1, 1))),
+            Action("Supplies", dict(wood=(1, 0), stone=(1, 0), coal=(1, 0), food=(1, 0), points=(2, 0))),
+            Action("Clearing", dict(wood=(1, 1))),
         ]
         self.players = players
         self.state = Game.State(players.values())
