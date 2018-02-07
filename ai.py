@@ -1,6 +1,5 @@
-from caverna import Controller
+from caverna import Controller, available_actions
 
 class Random(Controller):
-    def select_action(self, state):
-        return None
-
+    def select_action(self, game):
+        return available_actions(game)[0]

@@ -22,16 +22,19 @@ class Game(object):
             Action("Drift Mining", dict(stones=(1, 1))),
             Action("Logging", dict(wood=(3, 1))),
         ]
-        self.state = Game.State(players)
-
-    def players(self):
-        return self.state.players.values()
+        self.players = players
+        self.state = Game.State(players.values())
 
     def over(self):
         return self.state.round > 12
 
     def score(self, player):
         return 0
+
+
+def available_actions(game, state=None):
+    s = state or game.state
+    return game.actions
 
 
 class Controller(object):

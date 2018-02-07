@@ -10,10 +10,10 @@ def main():
         print("Round {}".format(game.state.round))
 
         # Take actions
-        for player in game.players():
+        for name, player in game.players.items():
             if player.dwarfs:
                 dwarf = player.dwarfs.pop()
-                action = controllers[player].select_action(game.state)
+                action = controllers[player].select_action(game)
                 game.state.dwarfs[action] = (player, dwarf)
 
         # Return dwarfs
@@ -26,7 +26,7 @@ def main():
         # Harvest crops
 
         # Feed dwarfs
-        for player in game.players():
+        for player in game.state.players:
             pass
 
         # Breed animals
@@ -34,7 +34,7 @@ def main():
         # Next turn
         game.state.round += 1
 
-    for name, player in game.state.players.items():
+    for name, player in game.players.items():
         score = game.score(player)
         print("{name}: {score}".format(name=name, score=score))
 
