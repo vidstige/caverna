@@ -1,13 +1,21 @@
+from typing import Tuple
+
+
 class Tile(object):
     def __init__(self, dwarfs=0, animals=0):
         self.dwarfs = 0
         self.animals = 0
+
+
 
 class TwinTile(object):
     def __init__(self, left: Tile, right: Tile):
         self.left = left
         self.right = right
 
+    def __repr__(self):
+        return "{}({}, {})".format(
+            self.__class__.__name__, self.left, self.right)
 
 Meadow = Tile()
 Field = Tile()
@@ -31,10 +39,10 @@ class Player(object):
 
 
 class Action(object):
-    def __init__(self, name, resources, tile=None):
+    def __init__(self, name, resources, tiles=None):
         self.name = name
         self.resources = resources
-        self.tile = tile
+        self.tiles = tiles
 
 
 class Game(object):
@@ -48,12 +56,12 @@ class Game(object):
 
     def __init__(self, players):
         self.actions = [
-            Action("Drift Mining", dict(stones=(1, 1)), tile=(ExcavatedAndMine,)),
-            Action("Logging", dict(wood=(3, 1)), tile=Outdoor),
+            Action("Drift Mining", dict(stones=(1, 1)), tiles=(ExcavatedAndMine,)),
+            Action("Logging", dict(wood=(3, 1)), tiles=Outdoor),
             Action("Wood Gathering", dict(wood=(1, 1))),
-            Action("Excavation", dict(stone=(1, 1)), tile=(ExcavatedTwin, ExcavatedAndMine)),
+            Action("Excavation", dict(stone=(1, 1)), tiles=(ExcavatedTwin, ExcavatedAndMine)),
             Action("Supplies", dict(wood=(1, 0), stone=(1, 0), coal=(1, 0), food=(1, 0), coins=(2, 0))),
-            Action("Clearing", dict(wood=(1, 1)), tile=Outdoor),
+            Action("Clearing", dict(wood=(1, 1)), tiles=Outdoor),
         ]
         self.players = players
         self.state = Game.State(players.values())
@@ -100,3 +108,6 @@ class Controller(object):
 
     def select_action(self, state):
         return None
+
+    def place(self, tiles: Tuple[Tile]):
+        pass

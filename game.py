@@ -22,7 +22,9 @@ def play(game: Game, controllers: List[Controller]) -> None:
                 game.gain_resources(action, player)
 
                 # place tile
-                pass
+                tiles = action.tiles
+                if tiles:
+                    controllers[player].place(tiles)
 
     # Return dwarfs
     game.return_dwarfs()
