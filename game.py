@@ -33,8 +33,9 @@ def main():
                 # gain resources
                 action_resources = game.state.action_resources.pop(action)
                 for resource, count in action_resources.items():
-                    initial, per_round = rc
-                    
+                    if resource not in player.resources:
+                        player.resources[resource] = 0
+                    player.resources[resource] += count
 
         # Return dwarfs
         for player, dwarf in game.state.dwarfs.values():

@@ -36,7 +36,8 @@ class Game(object):
         return self.state.round > 12
 
     def score(self, player):
-        return len(player.tiles) - 24
+        print(player.resources)
+        return player.resources.get('coins', 0) + (len(player.tiles) - 24)
 
 
 def available_actions(game, state=None):
