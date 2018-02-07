@@ -6,12 +6,18 @@ class Tile(object):
         self.dwarfs = 0
         self.animals = 0
 
+    def parts(self):
+        yield self
 
 
 class TwinTile(object):
     def __init__(self, left: Tile, right: Tile):
         self.left = left
         self.right = right
+
+    def parts(self):
+        yield self.left
+        yield self.right
 
     def __repr__(self):
         return "{}({}, {})".format(
@@ -57,11 +63,11 @@ class Game(object):
     def __init__(self, players):
         self.actions = [
             Action("Drift Mining", dict(stones=(1, 1)), tiles=(ExcavatedAndMine,)),
-            Action("Logging", dict(wood=(3, 1)), tiles=Outdoor),
+            Action("Logging", dict(wood=(3, 1)), tiles=(Outdoor,)),
             Action("Wood Gathering", dict(wood=(1, 1))),
             Action("Excavation", dict(stone=(1, 1)), tiles=(ExcavatedTwin, ExcavatedAndMine)),
             Action("Supplies", dict(wood=(1, 0), stone=(1, 0), coal=(1, 0), food=(1, 0), coins=(2, 0))),
-            Action("Clearing", dict(wood=(1, 1)), tiles=Outdoor),
+            Action("Clearing", dict(wood=(1, 1)), tiles=(Outdoor,)),
         ]
         self.players = players
         self.state = Game.State(players.values())
@@ -93,7 +99,6 @@ class Game(object):
         return self.state.round > 12
 
     def score(self, player):
-        print(player.resources)
         return player.resources.get('coins', 0) + \
             (len(player.tiles) - 24) + \
             len(player.dwarfs)
