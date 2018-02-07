@@ -1,8 +1,33 @@
+class Tile(object):
+    def __init__(self, dwarfs=0, animals=0):
+        self.dwarfs = 0
+        self.animals = 0
+
+class TwinTile(object):
+    def __init__(self, left: Tile, right: Tile):
+        self.left = left
+        self.right = right
+
+
+Meadow = Tile()
+Field = Tile()
+Pasture = Tile()
+Excavated = Tile()
+Mine = Tile()
+EntryLevelDwelling = Tile(dwarfs=2, animals=2)
+
+
+# Twin tiles
+Outdoor = TwinTile(Meadow, Field)
+ExcavatedTwin = TwinTile(Excavated, Excavated)
+ExcavatedAndMine = TwinTile(Excavated, Mine)
+
+
 class Player(object):
     def __init__(self):
         self.dwarfs = [0, 0]
         self.resources = dict(food=2)
-        self.tiles = {(3, 2): 'excavated', (3, 3): 'starting cave'}
+        self.tiles = {(3, 2): Excavated, (3, 3): EntryLevelDwelling}
 
 
 class Action(object):
