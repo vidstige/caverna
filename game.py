@@ -3,22 +3,18 @@ from caverna import *
 import ai
 
 
-def rotate(l, n):
-    """Rotate list n steps"""
-    return l[n:] + l[:n]
-
-
 def play(game: Game, controllers: List[Controller]) -> None:
     # Replenish resources (this is done first to ensure initial supply)
     game.replenish()
 
     # Take actions while any player has dwarfs
-    while any(p.dwarfs for p in game.players.values()):
-        for name, player in game.players.items():
+    frozen_players = list(game.state.players)
+    while any(p.dwarfs for p in game.state.players):
+        for player in frozen_players:
             if player.dwarfs:
                 dwarf = player.dwarfs.pop()
                 action = controllers[player].select_action(game)
-                print("{} selects {}".format(name, action.name))
+                print("{} selects {}".format(game.names[player], action.name))
                 
                 # place dwarf
                 game.state.dwarfs[action] = (player, dwarf)
@@ -53,13 +49,14 @@ def main():
     samuel = Player()
     maria = Player()
     controllers = {samuel: ai.Random(samuel), maria: ai.Random(maria)}
-    game = Game({'samuel': samuel, 'maria': maria})
+    game = Game({samuel: 'samuel', maria: 'maria'})
     while not game.over():
         print("Round {}".format(game.state.round))
         play(game, controllers)
         game.state.round += 1
 
-    for name, player in game.players.items():
+    for player in game.state.players:
+        name = game.names[player]
         score = game.score(player)
         print(player.resources)
         print("{name}: {score}".format(name=name, score=score))

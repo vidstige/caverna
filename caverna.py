@@ -1,4 +1,9 @@
-from typing import Tuple
+from typing import Dict, List, Tuple
+
+
+def rotate(l, n):
+    """Rotate list n steps"""
+    return l[n:] + l[:n]
 
 
 class Tile(object):
@@ -55,13 +60,13 @@ class Action(object):
 class Game(object):
     class State(object):
         """Encompasses and entire game state"""
-        def __init__(self, players):
+        def __init__(self, players: List[Player]):
             self.players = players
             self.round = 0
             self.action_resources = {}
             self.dwarfs = {}  # placed dwarfs
 
-    def __init__(self, players):
+    def __init__(self, players: Dict[Player, str]):
         self.actions = [
             Action("Drift Mining", dict(stones=(1, 1)), tiles=(ExcavatedAndMine,)),
             Action("Logging", dict(wood=(3, 1)), tiles=(Outdoor,)),
@@ -73,11 +78,12 @@ class Game(object):
             Action("Ore Mining", dict(coal=(2, 1))),
             Action("Sustenance", dict(food=(1, 1), wheat=(1, 0)), tiles=(Outdoor,)),
         ]
-        self.players = players
-        self.state = Game.State(players.values())
+        self.names = players
+        self.state = Game.State(list(players.keys()))
 
-    def set_starting_player(self, player):
-        pass
+    def set_starting_player(self, player: Player):
+        i = self.state.players.index(player)
+        self.state.players = rotate(self.state.players, len(self.state.players) - i)
 
     def return_dwarfs(self):
         for player, dwarf in self.state.dwarfs.values():
