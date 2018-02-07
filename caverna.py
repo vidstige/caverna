@@ -1,5 +1,3 @@
-import ai
-
 class Player(object):
     def __init__(self):
         self.dwarfs = [0, 0]
@@ -35,3 +33,10 @@ class Game(object):
     def score(self, player):
         return 0
 
+
+class Controller(object):
+    def __init__(self, player):
+        self.player = player
+
+    def select_action(self, state):
+        return None

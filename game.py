@@ -1,5 +1,5 @@
 from caverna import *
-
+import ai
 
 def main():
     samuel = Player()
@@ -13,7 +13,7 @@ def main():
         for player in game.players():
             if player.dwarfs:
                 dwarf = player.dwarfs.pop()
-                action = controllers[player].select_action()
+                action = controllers[player].select_action(game.state)
                 game.state.dwarfs[action] = (player, dwarf)
 
         # Return dwarfs

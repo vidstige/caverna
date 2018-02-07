@@ -1,11 +1,6 @@
-class Controller(object):
-    def __init__(self, player):
-        self.player = player
-
-    def select_action(self):
-        return None
+from caverna import Controller
 
 class Random(Controller):
-    def select_action(self):
+    def select_action(self, state):
         return None
 
