@@ -76,6 +76,9 @@ class Game(object):
         self.players = players
         self.state = Game.State(players.values())
 
+    def set_starting_player(self, player):
+        pass
+
     def return_dwarfs(self):
         for player, dwarf in self.state.dwarfs.values():
             player.dwarfs.append(dwarf)

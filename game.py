@@ -3,6 +3,11 @@ from caverna import *
 import ai
 
 
+def rotate(l, n):
+    """Rotate list n steps"""
+    return l[n:] + l[:n]
+
+
 def play(game: Game, controllers: List[Controller]) -> None:
     # Replenish resources (this is done first to ensure initial supply)
     game.replenish()
@@ -20,6 +25,10 @@ def play(game: Game, controllers: List[Controller]) -> None:
                 
                 # gain resources
                 game.gain_resources(action, player)
+
+                # starting player
+                if action.starting_player:
+                    game.set_starting_player(player)                    
 
                 # place tile
                 tiles = action.tiles
@@ -52,6 +61,7 @@ def main():
 
     for name, player in game.players.items():
         score = game.score(player)
+        print(player.resources)
         print("{name}: {score}".format(name=name, score=score))
 
 
