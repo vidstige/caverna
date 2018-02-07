@@ -2,6 +2,7 @@ class Player(object):
     def __init__(self):
         self.dwarfs = [0, 0]
         self.resources = dict(food=2)
+        self.tiles = {(3, 2): 'excavated', (3, 3): 'starting cave'}
 
 
 class Action(object):
@@ -30,7 +31,7 @@ class Game(object):
         return self.state.round > 12
 
     def score(self, player):
-        return 0
+        return len(player.tiles) - 24
 
 
 def available_actions(game, state=None):
