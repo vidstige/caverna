@@ -17,6 +17,7 @@ class Game(object):
         def __init__(self, players):
             self.players = players
             self.round = 0
+            self.action_resources = {}
             self.dwarfs = {}  # placed dwarfs
 
     def __init__(self, players):
@@ -25,7 +26,7 @@ class Game(object):
             Action("Logging", dict(wood=(3, 1))),
             Action("Wood Gathering", dict(wood=(1, 1))),
             Action("Excavation", dict(stone=(1, 1))),
-            Action("Supplies", dict(wood=(1, 0), stone=(1, 0), coal=(1, 0), food=(1, 0), points=(2, 0))),
+            Action("Supplies", dict(wood=(1, 0), stone=(1, 0), coal=(1, 0), food=(1, 0), coins=(2, 0))),
             Action("Clearing", dict(wood=(1, 1))),
         ]
         self.players = players
