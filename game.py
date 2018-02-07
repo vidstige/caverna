@@ -31,16 +31,10 @@ def main():
                 game.state.dwarfs[action] = (player, dwarf)
                 
                 # gain resources
-                action_resources = game.state.action_resources.pop(action)
-                for resource, count in action_resources.items():
-                    if resource not in player.resources:
-                        player.resources[resource] = 0
-                    player.resources[resource] += count
+                game.gain_resources(action, player)
 
         # Return dwarfs
-        for player, dwarf in game.state.dwarfs.values():
-            player.dwarfs.append(dwarf)
-        game.state.dwarfs = {}
+        game.return_dwarfs()
 
         # Harvest crops
 

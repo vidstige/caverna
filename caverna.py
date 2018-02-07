@@ -32,6 +32,29 @@ class Game(object):
         self.players = players
         self.state = Game.State(players.values())
 
+    def return_dwarfs(self):
+        for player, dwarf in self.state.dwarfs.values():
+            player.dwarfs.append(dwarf)
+        self.state.dwarfs = {}
+
+    def replenish(self):
+        for action in self.actions:
+            for resource, rc in action.resources.items():
+                initial, per_round = rc
+                current = self.state.action_resources.get(action, {})
+                if resource in current:
+                    current[resource] += per_round
+                else:
+                    current[resource] = initial
+                self.state.action_resources[action] = current
+
+    def gain_resources(self, action: Action, player: Player) -> None:
+        action_resources = self.state.action_resources.pop(action)
+        for resource, count in action_resources.items():
+            if resource not in player.resources:
+                player.resources[resource] = 0
+            player.resources[resource] += count
+
     def over(self):
         return self.state.round > 12
 
