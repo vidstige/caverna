@@ -31,9 +31,10 @@ class Player(object):
 
 
 class Action(object):
-    def __init__(self, name, resources):
+    def __init__(self, name, resources, tile=None):
         self.name = name
         self.resources = resources
+        self.tile = tile
 
 
 class Game(object):
@@ -47,12 +48,12 @@ class Game(object):
 
     def __init__(self, players):
         self.actions = [
-            Action("Drift Mining", dict(stones=(1, 1))),
-            Action("Logging", dict(wood=(3, 1))),
+            Action("Drift Mining", dict(stones=(1, 1)), tile=(ExcavatedAndMine,)),
+            Action("Logging", dict(wood=(3, 1)), tile=Outdoor),
             Action("Wood Gathering", dict(wood=(1, 1))),
-            Action("Excavation", dict(stone=(1, 1))),
+            Action("Excavation", dict(stone=(1, 1)), tile=(ExcavatedTwin, ExcavatedAndMine)),
             Action("Supplies", dict(wood=(1, 0), stone=(1, 0), coal=(1, 0), food=(1, 0), coins=(2, 0))),
-            Action("Clearing", dict(wood=(1, 1))),
+            Action("Clearing", dict(wood=(1, 1)), tile=Outdoor),
         ]
         self.players = players
         self.state = Game.State(players.values())
