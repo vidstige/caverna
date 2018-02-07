@@ -14,12 +14,13 @@ def main():
             if player.dwarfs:
                 dwarf = player.dwarfs.pop()
                 action = controllers[player].select_action(game)
+                print("{} selects {}".format(name, action.name))
                 game.state.dwarfs[action] = (player, dwarf)
 
         # Return dwarfs
         for player, dwarf in game.state.dwarfs.values():
             player.dwarfs.append(dwarf)
-        game.dwarfs = {}
+        game.state.dwarfs = {}
 
         # Replenish resources
 

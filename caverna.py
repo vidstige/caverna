@@ -3,6 +3,7 @@ class Player(object):
         self.dwarfs = [0, 0]
         self.resources = dict(food=2)
 
+
 class Action(object):
     def __init__(self, name, resources):
         self.name = name
@@ -34,7 +35,7 @@ class Game(object):
 
 def available_actions(game, state=None):
     s = state or game.state
-    return game.actions
+    return [a for a in game.actions if a not in s.dwarfs]
 
 
 class Controller(object):
