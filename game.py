@@ -3,7 +3,7 @@ from caverna import *
 import ai
 
 
-def play(game: Game, controllers: Dict[Player, Controller]) -> None:
+def play_round(game: Game, controllers: Dict[Player, Controller]) -> None:
     # Take actions while any player has dwarfs
     while game.round():
         player = game.current()
@@ -32,7 +32,7 @@ def main():
     game = Game({samuel: 'samuel', maria: 'maria'})
     while not game.over():
         print("Round {}".format(game.state.round))
-        play(game, controllers)
+        play_round(game, controllers)
         game.state.round += 1
 
     for player in game.state.players:
