@@ -74,7 +74,7 @@ class Game(object):
             Action("Wood Gathering", dict(wood=(1, 1))),
 
             Action("Excavation", dict(stone=(1, 1)), tiles=(ExcavatedTwin, ExcavatedAndMine)),
-            Action("Supplies", dict(wood=(1, 0), stone=(1, 0), coal=(1, 0), food=(1, 0), coins=(2, 0))),
+            Action("Supplies", dict(wood=(1, 0), stone=(1, 0), coal=(1, 0), food=(1, 0), coin=(2, 0))),
             Action("Clearing", dict(wood=(1, 1)), tiles=(Outdoor,)),
 
             Action("Starting Player", dict(food=(1, 1)), actions=[self.starting_player]),
@@ -125,7 +125,10 @@ class Game(object):
         return self.state.round > 12
 
     def score(self, player):
-        return player.resources.get('coins', 0) + \
+        return \
+            (player.resources.get('wheat', 0) + 1) // 2 + \
+            player.resources.get('coin', 0) + \
+            player.resources.get('ruby', 0) + \
             (len(player.tiles) - 24) + \
             len(player.dwarfs)
 
