@@ -87,6 +87,7 @@ class Game(object):
         ]
         self.names = players
         self.state = Game.State(list(players.keys()))
+        self.replenish()
 
     # action functions
     def starting_player(self, player: Player):

@@ -4,9 +4,6 @@ import ai
 
 
 def play(game: Game, controllers: List[Controller]) -> None:
-    # Replenish resources (this is done first to ensure initial supply)
-    game.replenish()
-
     # Take actions while any player has dwarfs
     frozen_players = list(game.state.players)
     while any(p.dwarfs for p in game.state.players):
