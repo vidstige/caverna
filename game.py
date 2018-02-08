@@ -22,9 +22,10 @@ def play(game: Game, controllers: List[Controller]) -> None:
                 # gain resources
                 game.gain_resources(action, player)
 
-                # starting player
-                if action.starting_player:
-                    game.set_starting_player(player)                    
+                # actions such as starting player,
+                # sow.
+                for a in action.actions:
+                    a(player)
 
                 # place tile
                 tiles = action.tiles

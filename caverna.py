@@ -50,11 +50,12 @@ class Player(object):
 
 
 class Action(object):
-    def __init__(self, name, resources, tiles=None, starting_player=False):
+    """Represents an action space in Caverna"""
+    def __init__(self, name, resources, tiles=None, actions=[]):
         self.name = name
         self.resources = resources
         self.tiles = tiles
-        self.starting_player = starting_player
+        self.actions = actions
 
 
 class Game(object):
@@ -71,19 +72,31 @@ class Game(object):
             Action("Drift Mining", dict(stones=(1, 1)), tiles=(ExcavatedAndMine,)),
             Action("Logging", dict(wood=(3, 1)), tiles=(Outdoor,)),
             Action("Wood Gathering", dict(wood=(1, 1))),
+
             Action("Excavation", dict(stone=(1, 1)), tiles=(ExcavatedTwin, ExcavatedAndMine)),
             Action("Supplies", dict(wood=(1, 0), stone=(1, 0), coal=(1, 0), food=(1, 0), coins=(2, 0))),
             Action("Clearing", dict(wood=(1, 1)), tiles=(Outdoor,)),
-            Action("Starting Player", dict(food=(1, 1)), starting_player=True),
+
+            Action("Starting Player", dict(food=(1, 1)), actions=[self.starting_player]),
             Action("Ore Mining", dict(coal=(2, 1))),
             Action("Sustenance", dict(food=(1, 1), wheat=(1, 0)), tiles=(Outdoor,)),
+
+            Action("Ruby Mining", dict(ruby=(1, 1))),
+            Action("House Work", dict(), actions=[self.furinsh_cavern]),  # TODO: Furinsh cavern
+            Action("Slash and Burn", dict(), tiles=(Outdoor,), actions=[self.sow]),
         ]
         self.names = players
         self.state = Game.State(list(players.keys()))
 
-    def set_starting_player(self, player: Player):
+    # action functions
+    def starting_player(self, player: Player):
         i = self.state.players.index(player)
         self.state.players = rotate(self.state.players, len(self.state.players) - i)
+
+    def sow(self, player: Player):
+        pass
+    def furinsh_cavern(self, player: Player):
+        pass
 
     def return_dwarfs(self):
         for player, dwarf in self.state.dwarfs.values():
@@ -102,7 +115,7 @@ class Game(object):
                 self.state.action_resources[action] = current
 
     def gain_resources(self, action: Action, player: Player) -> None:
-        action_resources = self.state.action_resources.pop(action)
+        action_resources = self.state.action_resources.pop(action, {})
         for resource, count in action_resources.items():
             if resource not in player.resources:
                 player.resources[resource] = 0
