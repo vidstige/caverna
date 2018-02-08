@@ -1,33 +1,15 @@
-from typing import List
+from typing import Dict, List
 from caverna import *
 import ai
 
 
-def play(game: Game, controllers: List[Controller]) -> None:
+def play(game: Game, controllers: Dict[Player, Controller]) -> None:
     # Take actions while any player has dwarfs
-    frozen_players = list(game.state.players)
-    while any(p.dwarfs for p in game.state.players):
-        for player in frozen_players:
-            if player.dwarfs:
-                dwarf = player.dwarfs.pop()
-                action = controllers[player].select_action(game)
-                print("{} selects {}".format(game.names[player], action.name))
-                
-                # place dwarf
-                game.state.dwarfs[action] = (player, dwarf)
-                
-                # gain resources
-                game.gain_resources(action, player)
-
-                # actions such as starting player,
-                # sow.
-                for a in action.actions:
-                    a(player)
-
-                # place tile
-                tiles = action.tiles
-                if tiles:
-                    controllers[player].place(tiles)
+    while game.round():
+        player = game.current()
+        action = controllers[player].select_action(game)
+        print("{} selects {}".format(game.names[player], action.name))
+        game.take(action)
 
     # Return dwarfs
     game.return_dwarfs()

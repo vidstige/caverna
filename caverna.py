@@ -1,11 +1,6 @@
 from typing import Dict, List, Tuple
 
 
-def rotate(l, n):
-    """Rotate list n steps"""
-    return l[n:] + l[:n]
-
-
 class Tile(object):
     def __init__(self, dwarfs=0, animals=0):
         self.dwarfs = 0
@@ -58,6 +53,37 @@ class Action(object):
         self.actions = actions
 
 
+# Tile autoplacing
+
+# 433xxx
+# 452xxx
+# 152xxx
+# 100xxx
+TILE_ORDER = [
+    (2, 3), (1, 3),
+    (0, 3), (0, 2),
+    (2, 2), (2, 1),
+    (2, 0), (1, 0),
+    (0, 0), (0, 1),
+    (1, 1), (1, 2),
+]
+
+def next_free(tiles: List[Tuple[int, int]]) -> Tuple[int, int]:
+    for p in TILE_ORDER:
+        if p not in tiles:
+            return p
+    return None
+
+
+def autoplace(player: Player, tiles: Tuple[Tile]):
+    tile = tiles[0]  # select first tile of multiple available
+    
+    for t in tile.parts():
+        p = next_free(player.tiles)
+        if p:
+            player.tiles[p] = p
+
+
 class Game(object):
     class State(object):
         """Encompasses and entire game state"""
@@ -66,6 +92,8 @@ class Game(object):
             self.round = 0
             self.action_resources = {}
             self.dwarfs = {}  # placed dwarfs
+            self.current = 0  # current player index
+            self.starting = 0  # starting player index
 
     def __init__(self, players: Dict[Player, str]):
         self.actions = [
@@ -91,13 +119,48 @@ class Game(object):
 
     # action functions
     def starting_player(self, player: Player):
-        i = self.state.players.index(player)
-        self.state.players = rotate(self.state.players, len(self.state.players) - i)
+        self.state.starting = self.state.players.index(player)
 
     def sow(self, player: Player):
         pass
     def furinsh_cavern(self, player: Player):
         pass
+
+    def round(self, state=None):
+        """Whether the dwarft placing phase is still ongoing"""
+        s = state or self.state
+        return any(p.dwarfs for p in s.players)
+
+    def current(self, state=None):
+        s = state or self.state
+        return s.players[s.current]
+
+    def take(self, action: Action):
+        player = self.current()
+        dwarf = player.dwarfs.pop()
+
+        # place dwarf
+        self.state.dwarfs[action] = (player, dwarf)
+        
+        # gain resources
+        self.gain_resources(action, player)
+
+        # actions such as starting player, sow
+        for a in action.actions:
+            a(player)
+
+        # place tiles, if any
+        if action.tiles:
+            autoplace(player, action.tiles)
+
+        # next player
+        if self.round():
+            # find next player with dwarfs left
+            self.state.current = (self.state.current + 1) % len(self.state.players)
+            while not self.state.players[self.state.current].dwarfs:
+                self.state.current = (self.state.current + 1) % len(self.state.players)
+        else:
+            self.state.current = self.state.starting
 
     def return_dwarfs(self):
         for player, dwarf in self.state.dwarfs.values():
