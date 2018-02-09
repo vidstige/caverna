@@ -113,13 +113,13 @@ class Game(object):
             Action("Supplies", dict(wood=(1, 0), stone=(1, 0), coal=(1, 0), food=(1, 0), coin=(2, 0))),
             Action("Clearing", dict(wood=(1, 1)), tiles=(Outdoor,)),
 
-            #Action("Starting Player", dict(food=(1, 1)), actions=[self.starting_player]),
-            #Action("Ore Mining", dict(coal=(2, 1))),
-            #Action("Sustenance", dict(food=(1, 1), wheat=(1, 0)), tiles=(Outdoor,)),
+            Action("Starting Player", dict(food=(1, 1)), actions=[self.starting_player]),
+            Action("Ore Mining", dict(coal=(2, 1))),
+            Action("Sustenance", dict(food=(1, 1), wheat=(1, 0)), tiles=(Outdoor,)),
 
-            #Action("Ruby Mining", dict(ruby=(1, 1))),
-            #Action("House Work", dict(), actions=[self.furinsh_cavern]),
-            #Action("Slash and Burn", dict(), tiles=(Outdoor,), actions=[self.sow]),
+            Action("Ruby Mining", dict(ruby=(1, 1))),
+            Action("House Work", dict(), actions=[self.furinsh_cavern]),
+            Action("Slash and Burn", dict(), tiles=(Outdoor,), actions=[self.sow]),
         ]
         self.players = players
 
