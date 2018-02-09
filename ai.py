@@ -5,7 +5,10 @@ from caverna import *
 inf = 2 ** 64
 
 
-def minmax(game: Game, state: Game.State, player: Player, alpha: int, beta: int) -> Tuple[Action, int]:
+def minmax(game: Game, state: Game.State, player: Player, d: int, alpha: int, beta: int) -> Tuple[Action, int]:
+    if d <= 0:
+        return None, game.score(state, player), 1
+
     if not game.round(state):
         game.return_dwarfs(state)
         game.harvest(state)
@@ -19,7 +22,7 @@ def minmax(game: Game, state: Game.State, player: Player, alpha: int, beta: int)
     evaluations = {}
     nn = 0
     for action in available_actions(game, state):
-        a, e, n = minmax(game, game.take(action, state), player, alpha, beta)
+        a, e, n = minmax(game, game.take(action, state), player, d-1, alpha, beta)
         if maximizing:
             alpha = f(alpha, e)
         else:
@@ -36,7 +39,8 @@ def minmax(game: Game, state: Game.State, player: Player, alpha: int, beta: int)
 
 class MinMax(Controller):
     def select_action(self, game, state):
-        action, _, n = minmax(game, state, self.player, -inf, inf)
+        depth = 7
+        action, _, n = minmax(game, state, self.player, depth, -inf, inf)
         print(n)
         return action
 
