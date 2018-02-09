@@ -13,16 +13,7 @@ def play_round(game: Game, controllers: Dict[Player, Controller]) -> None:
 
     # Return dwarfs
     game.return_dwarfs()
-
-    # Harvest crops
-    pass
-
-    # Feed dwarfs
-    for player in game.state.players:
-        pass
-
-    # Breed animals
-    pass
+    game.harvest()
 
 
 def main():

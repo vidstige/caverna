@@ -166,7 +166,19 @@ class Game(object):
         for player, dwarf in self.state.dwarfs.values():
             player.dwarfs.append(dwarf)
         self.state.dwarfs = {}
+    
+    def harvest(self):
+        # Harvest crops
+        pass
 
+        # Feed dwarfs
+        for player in self.state.players:
+            pass
+
+        # Breed animals
+        pass
+        self.replenish()
+        
     def replenish(self):
         for action in self.actions:
             for resource, rc in action.resources.items():
