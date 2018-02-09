@@ -81,7 +81,7 @@ def autoplace(player: Player, tiles: Tuple[Tile]):
     for t in tile.parts():
         p = next_free(player.tiles)
         if p:
-            player.tiles[p] = p
+            player.tiles[p] = t
 
 
 class Game(object):
@@ -110,7 +110,7 @@ class Game(object):
             Action("Sustenance", dict(food=(1, 1), wheat=(1, 0)), tiles=(Outdoor,)),
 
             Action("Ruby Mining", dict(ruby=(1, 1))),
-            Action("House Work", dict(), actions=[self.furinsh_cavern]),  # TODO: Furinsh cavern
+            Action("House Work", dict(), actions=[self.furinsh_cavern]),
             Action("Slash and Burn", dict(), tiles=(Outdoor,), actions=[self.sow]),
         ]
         self.names = players
@@ -123,6 +123,7 @@ class Game(object):
 
     def sow(self, player: Player):
         pass
+
     def furinsh_cavern(self, player: Player):
         pass
 
@@ -178,7 +179,7 @@ class Game(object):
         # Breed animals
         pass
         self.replenish()
-        
+
     def replenish(self):
         for action in self.actions:
             for resource, rc in action.resources.items():
