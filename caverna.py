@@ -215,7 +215,7 @@ class Game(object):
             state.player_states[player].resources[resource] += count
 
     def over(self, state: State):
-        return state.round > 0
+        return state.round > 1
 
     def score(self, state: State, player: Player):
         ps = state.player_states[player]
