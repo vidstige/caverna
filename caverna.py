@@ -56,7 +56,7 @@ class Action(object):
         self.actions = actions
 
     def __repr__(self):
-        return "Action"
+        return "Action(name={name})".format(name=self.name)
     
     def __deepcopy__(self, memo):
         return self  # don't copy
@@ -113,13 +113,13 @@ class Game(object):
             Action("Supplies", dict(wood=(1, 0), stone=(1, 0), coal=(1, 0), food=(1, 0), coin=(2, 0))),
             Action("Clearing", dict(wood=(1, 1)), tiles=(Outdoor,)),
 
-            Action("Starting Player", dict(food=(1, 1)), actions=[self.starting_player]),
-            Action("Ore Mining", dict(coal=(2, 1))),
-            Action("Sustenance", dict(food=(1, 1), wheat=(1, 0)), tiles=(Outdoor,)),
+            #Action("Starting Player", dict(food=(1, 1)), actions=[self.starting_player]),
+            #Action("Ore Mining", dict(coal=(2, 1))),
+            #Action("Sustenance", dict(food=(1, 1), wheat=(1, 0)), tiles=(Outdoor,)),
 
-            Action("Ruby Mining", dict(ruby=(1, 1))),
-            Action("House Work", dict(), actions=[self.furinsh_cavern]),
-            Action("Slash and Burn", dict(), tiles=(Outdoor,), actions=[self.sow]),
+            #Action("Ruby Mining", dict(ruby=(1, 1))),
+            #Action("House Work", dict(), actions=[self.furinsh_cavern]),
+            #Action("Slash and Burn", dict(), tiles=(Outdoor,), actions=[self.sow]),
         ]
         self.players = players
 
@@ -145,8 +145,8 @@ class Game(object):
         """Whether the dwarf placing phase is still ongoing"""
         return any(ps.dwarfs for ps in state.player_states.values())
 
-    def take(self, action: Action, state: State) -> State:
-        state = deepcopy(state)
+    def take(self, action: Action, state1: State) -> State:
+        state = deepcopy(state1)
         #state = self.state
 
         player = self.current_player(state)
@@ -215,7 +215,7 @@ class Game(object):
             state.player_states[player].resources[resource] += count
 
     def over(self, state: State):
-        return state.round > 12
+        return state.round > 0
 
     def score(self, state: State, player: Player):
         ps = state.player_states[player]

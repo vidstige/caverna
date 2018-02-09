@@ -20,7 +20,7 @@ def play_round(game: Game, state: Game.State, controllers: Dict[Player, Controll
 def main():
     samuel = Player('Samuel')
     maria = Player('Maria')
-    controllers = {samuel: ai.Random(samuel), maria: ai.Random(maria)}
+    controllers = {samuel: ai.MinMax(samuel), maria: ai.Random(maria)}
     game = Game([samuel, maria])
     state = game.initial()
     while not game.over(state):
