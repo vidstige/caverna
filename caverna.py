@@ -38,6 +38,11 @@ ExcavatedAndMine = TwinTile(Excavated, Mine)
 
 
 class Player(object):
+    def __init__(self, name: str):
+        self.name = name
+
+
+class PlayerState(object):
     def __init__(self):
         self.dwarfs = [0, 0]
         self.resources = dict(food=2)
@@ -75,13 +80,13 @@ def next_free(tiles: List[Tuple[int, int]]) -> Tuple[int, int]:
     return None
 
 
-def autoplace(player: Player, tiles: Tuple[Tile]):
+def autoplace(player_state: PlayerState, tiles: Tuple[Tile]):
     tile = tiles[0]  # select first tile of multiple available
     
     for t in tile.parts():
-        p = next_free(player.tiles)
+        p = next_free(player_state.tiles)
         if p:
-            player.tiles[p] = t
+            player_state.tiles[p] = t
 
 
 class Game(object):
@@ -89,13 +94,17 @@ class Game(object):
         """Encompasses and entire game state"""
         def __init__(self, players: List[Player]):
             self.players = players
+            self.player_states = {p: PlayerState() for p in players}
             self.round = 0
             self.action_resources = {}
             self.dwarfs = {}  # placed dwarfs
-            self.current = 0  # current player index
             self.starting = 0  # starting player index
+            self.current = 0  # current player index
 
-    def __init__(self, players: Dict[Player, str]):
+        def current_player(self) -> Player:
+            return self.players[self.current]
+
+    def __init__(self, players: List[Player]):
         self.actions = [
             Action("Drift Mining", dict(stones=(1, 1)), tiles=(ExcavatedAndMine,)),
             Action("Logging", dict(wood=(3, 1)), tiles=(Outdoor,)),
@@ -113,8 +122,7 @@ class Game(object):
             Action("House Work", dict(), actions=[self.furinsh_cavern]),
             Action("Slash and Burn", dict(), tiles=(Outdoor,), actions=[self.sow]),
         ]
-        self.names = players
-        self.state = Game.State(list(players.keys()))
+        self.state = Game.State(players)
         self.replenish()
 
     # action functions
@@ -130,21 +138,20 @@ class Game(object):
     def round(self, state=None):
         """Whether the dwarft placing phase is still ongoing"""
         s = state or self.state
-        return any(p.dwarfs for p in s.players)
-
-    def current(self, state=None):
-        s = state or self.state
-        return s.players[s.current]
+        return any(ps.dwarfs for ps in s.player_states.values())
 
     def take(self, action: Action):
-        player = self.current()
-        dwarf = player.dwarfs.pop()
+        state = self.state
+
+        player = state.current_player()
+        ps = state.player_states[player]
+        dwarf = ps.dwarfs.pop()
 
         # place dwarf
-        self.state.dwarfs[action] = (player, dwarf)
+        state.dwarfs[action] = (player, dwarf)
         
         # gain resources
-        self.gain_resources(action, player)
+        self.gain_resources(state, action, player)
 
         # actions such as starting player, sow
         for a in action.actions:
@@ -152,21 +159,21 @@ class Game(object):
 
         # place tiles, if any
         if action.tiles:
-            autoplace(player, action.tiles)
+            autoplace(state.player_states[player], action.tiles)
 
         # next player
         if self.round():
             # find next player with dwarfs left
-            self.state.current = (self.state.current + 1) % len(self.state.players)
-            while not self.state.players[self.state.current].dwarfs:
-                self.state.current = (self.state.current + 1) % len(self.state.players)
+            state.current = (state.current + 1) % len(state.players)
+            while not state.player_states[state.players[state.current]].dwarfs:
+                state.current = (state.current + 1) % len(state.players)
         else:
-            self.state.current = self.state.starting
+            state.current = state.starting
 
-    def return_dwarfs(self):
-        for player, dwarf in self.state.dwarfs.values():
-            player.dwarfs.append(dwarf)
-        self.state.dwarfs = {}
+    def return_dwarfs(self, state: State):
+        for player, dwarf in state.dwarfs.values():
+            state.player_states[player].dwarfs.append(dwarf)
+        state.dwarfs = {}
     
     def harvest(self):
         # Harvest crops
@@ -191,23 +198,24 @@ class Game(object):
                     current[resource] = initial
                 self.state.action_resources[action] = current
 
-    def gain_resources(self, action: Action, player: Player) -> None:
-        action_resources = self.state.action_resources.pop(action, {})
+    def gain_resources(self, state: State, action: Action, player: Player) -> None:
+        action_resources = state.action_resources.pop(action, {})
         for resource, count in action_resources.items():
-            if resource not in player.resources:
-                player.resources[resource] = 0
-            player.resources[resource] += count
+            if resource not in state.player_states[player].resources:
+                state.player_states[player].resources[resource] = 0
+            state.player_states[player].resources[resource] += count
 
     def over(self):
         return self.state.round > 12
 
-    def score(self, player):
+    def score(self, player: Player):
+        ps = self.state.player_states[player]
         return \
-            (player.resources.get('wheat', 0) + 1) // 2 + \
-            player.resources.get('coin', 0) + \
-            player.resources.get('ruby', 0) + \
-            (len(player.tiles) - 24) + \
-            len(player.dwarfs)
+            (ps.resources.get('wheat', 0) + 1) // 2 + \
+            ps.resources.get('coin', 0) + \
+            ps.resources.get('ruby', 0) + \
+            (len(ps.tiles) - 24) + \
+            len(ps.dwarfs)
 
 
 def available_actions(game, state=None):
