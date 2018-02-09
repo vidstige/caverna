@@ -1,5 +1,5 @@
 from typing import Dict, List, Tuple
-
+from copy import deepcopy
 
 class Tile(object):
     def __init__(self, dwarfs=0, animals=0):
@@ -93,16 +93,12 @@ class Game(object):
     class State(object):
         """Encompasses and entire game state"""
         def __init__(self, players: List[Player]):
-            self.players = players
             self.player_states = {p: PlayerState() for p in players}
             self.round = 0
             self.action_resources = {}
             self.dwarfs = {}  # placed dwarfs
             self.starting = 0  # starting player index
             self.current = 0  # current player index
-
-        def current_player(self) -> Player:
-            return self.players[self.current]
 
     def __init__(self, players: List[Player]):
         self.actions = [
@@ -122,12 +118,16 @@ class Game(object):
             Action("House Work", dict(), actions=[self.furinsh_cavern]),
             Action("Slash and Burn", dict(), tiles=(Outdoor,), actions=[self.sow]),
         ]
+        self.players = players
         self.state = Game.State(players)
-        self.replenish()
+        self.replenish(self.state)
+
+    def current_player(self, state: State) -> Player:
+        return self.players[state.current]
 
     # action functions
     def starting_player(self, player: Player):
-        self.state.starting = self.state.players.index(player)
+        self.state.starting = self.players.index(player)
 
     def sow(self, player: Player):
         pass
@@ -135,15 +135,15 @@ class Game(object):
     def furinsh_cavern(self, player: Player):
         pass
 
-    def round(self, state=None):
+    def round(self, state: State):
         """Whether the dwarft placing phase is still ongoing"""
-        s = state or self.state
-        return any(ps.dwarfs for ps in s.player_states.values())
+        return any(ps.dwarfs for ps in state.player_states.values())
 
-    def take(self, action: Action):
+    def take(self, action: Action) -> State:
+        #state = deepcopy(self.state)
         state = self.state
 
-        player = state.current_player()
+        player = self.current_player(state)
         ps = state.player_states[player]
         dwarf = ps.dwarfs.pop()
 
@@ -162,41 +162,44 @@ class Game(object):
             autoplace(state.player_states[player], action.tiles)
 
         # next player
-        if self.round():
+        if self.round(state):
             # find next player with dwarfs left
-            state.current = (state.current + 1) % len(state.players)
-            while not state.player_states[state.players[state.current]].dwarfs:
-                state.current = (state.current + 1) % len(state.players)
+            state.current = (state.current + 1) % len(self.players)
+            while not state.player_states[self.players[state.current]].dwarfs:
+                state.current = (state.current + 1) % len(self.players)
         else:
             state.current = state.starting
+
+        return state
 
     def return_dwarfs(self, state: State):
         for player, dwarf in state.dwarfs.values():
             state.player_states[player].dwarfs.append(dwarf)
         state.dwarfs = {}
     
-    def harvest(self):
+    def harvest(self, state):
         # Harvest crops
         pass
 
         # Feed dwarfs
-        for player in self.state.players:
+        for player in self.players:
             pass
 
         # Breed animals
         pass
-        self.replenish()
 
-    def replenish(self):
+        self.replenish(self.state)
+
+    def replenish(self, state: State):
         for action in self.actions:
             for resource, rc in action.resources.items():
                 initial, per_round = rc
-                current = self.state.action_resources.get(action, {})
+                current = state.action_resources.get(action, {})
                 if resource in current:
                     current[resource] += per_round
                 else:
                     current[resource] = initial
-                self.state.action_resources[action] = current
+                state.action_resources[action] = current
 
     def gain_resources(self, state: State, action: Action, player: Player) -> None:
         action_resources = state.action_resources.pop(action, {})
