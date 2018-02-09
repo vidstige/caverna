@@ -8,7 +8,7 @@ def play_round(game: Game, controllers: Dict[Player, Controller]) -> None:
     while game.round(game.state):
         player = game.current_player(game.state)
         action = controllers[player].select_action(game)
-        print("{} selects {}".format(player.name, action.name))
+        print("{} selects {}".format(player, action.name))
         game.state = game.take(action)
 
     # Return dwarfs
@@ -27,7 +27,7 @@ def main():
         game.state.round += 1
 
     for player in game.players:
-        name = player.name
+        name = player
         score = game.score(player)
         print(game.state.player_states[player].resources)
         print("{name}: {score}".format(name=name, score=score))

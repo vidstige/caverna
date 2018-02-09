@@ -37,16 +37,13 @@ ExcavatedTwin = TwinTile(Excavated, Excavated)
 ExcavatedAndMine = TwinTile(Excavated, Mine)
 
 
-class Player(object):
-    def __init__(self, name: str):
-        self.name = name
-
+class Player(str):
+    pass
 
 class PlayerState(object):
-    def __init__(self):
-        self.dwarfs = [0, 0]
-        self.resources = dict(food=2)
-        self.tiles = {(3, 2): Excavated, (3, 3): EntryLevelDwelling}
+    dwarfs = [0, 0]
+    resources = dict(food=2)
+    tiles = {(3, 2): Excavated, (3, 3): EntryLevelDwelling}
 
 
 class Action(object):
@@ -188,7 +185,7 @@ class Game(object):
         # Breed animals
         pass
 
-        self.replenish(self.state)
+        self.replenish(state)
 
     def replenish(self, state: State):
         for action in self.actions:
