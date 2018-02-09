@@ -122,28 +122,31 @@ class Game(object):
             Action("Slash and Burn", dict(), tiles=(Outdoor,), actions=[self.sow]),
         ]
         self.players = players
-        self.state = Game.State(players)
-        self.replenish(self.state)
+
+    def initial(self) -> State:
+        state = Game.State(self.players) 
+        self.replenish(state)
+        return state
 
     def current_player(self, state: State) -> Player:
         return self.players[state.current]
 
     # action functions
-    def starting_player(self, player: Player):
-        self.state.starting = self.players.index(player)
+    def starting_player(self, player: Player, state: State):
+        state.starting = self.players.index(player)
 
-    def sow(self, player: Player):
+    def sow(self, player: Player, state: State):
         pass
 
-    def furinsh_cavern(self, player: Player):
+    def furinsh_cavern(self, player: Player, state: State):
         pass
 
     def round(self, state: State):
         """Whether the dwarf placing phase is still ongoing"""
         return any(ps.dwarfs for ps in state.player_states.values())
 
-    def take(self, action: Action) -> State:
-        state = deepcopy(self.state)
+    def take(self, action: Action, state: State) -> State:
+        state = deepcopy(state)
         #state = self.state
 
         player = self.current_player(state)
@@ -158,7 +161,7 @@ class Game(object):
 
         # actions such as starting player, sow
         for a in action.actions:
-            a(player)
+            a(player, state)
 
         # place tiles, if any
         if action.tiles:
@@ -211,11 +214,11 @@ class Game(object):
                 state.player_states[player].resources[resource] = 0
             state.player_states[player].resources[resource] += count
 
-    def over(self):
-        return self.state.round > 12
+    def over(self, state: State):
+        return state.round > 12
 
-    def score(self, player: Player):
-        ps = self.state.player_states[player]
+    def score(self, state: State, player: Player):
+        ps = state.player_states[player]
         return \
             (ps.resources.get('wheat', 0) + 1) // 2 + \
             ps.resources.get('coin', 0) + \
@@ -224,9 +227,8 @@ class Game(object):
             len(ps.dwarfs)
 
 
-def available_actions(game, state=None):
-    s = state or game.state
-    return [a for a in game.actions if a not in s.dwarfs]
+def available_actions(game, state):
+    return [a for a in game.actions if a not in state.dwarfs]
 
 
 class Controller(object):
