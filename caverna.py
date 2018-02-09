@@ -41,9 +41,10 @@ class Player(str):
     pass
 
 class PlayerState(object):
-    dwarfs = [0, 0]
-    resources = dict(food=2)
-    tiles = {(3, 2): Excavated, (3, 3): EntryLevelDwelling}
+    def __init__(self):
+        self.dwarfs = [0, 0]
+        self.resources = dict(food=2)
+        self.tiles = {(3, 2): Excavated, (3, 3): EntryLevelDwelling}
 
 
 class Action(object):
@@ -54,6 +55,11 @@ class Action(object):
         self.tiles = tiles
         self.actions = actions
 
+    def __repr__(self):
+        return "Action"
+    
+    def __deepcopy__(self, memo):
+        return self  # don't copy
 
 # Tile autoplacing
 
@@ -133,12 +139,12 @@ class Game(object):
         pass
 
     def round(self, state: State):
-        """Whether the dwarft placing phase is still ongoing"""
+        """Whether the dwarf placing phase is still ongoing"""
         return any(ps.dwarfs for ps in state.player_states.values())
 
     def take(self, action: Action) -> State:
-        #state = deepcopy(self.state)
-        state = self.state
+        state = deepcopy(self.state)
+        #state = self.state
 
         player = self.current_player(state)
         ps = state.player_states[player]
@@ -174,7 +180,7 @@ class Game(object):
             state.player_states[player].dwarfs.append(dwarf)
         state.dwarfs = {}
     
-    def harvest(self, state):
+    def harvest(self, state: State):
         # Harvest crops
         pass
 
