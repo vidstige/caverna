@@ -2,33 +2,34 @@ from typing import List, Tuple
 import random
 from caverna import *
 
-leafs = 0
-def minmax(game: Game, state: Game.State, player: Player) -> Tuple[Action, int]:
-    global leafs
-    #print(state.round)
-    if game.over(state):
-        leafs += 1
-        if leafs % 307 == 0:
-            print("leaf {}".format(leafs))
-        return None, game.score(state, player)
 
+def minmax(game: Game, state: Game.State, player: Player) -> Tuple[Action, int]:
     if not game.round(state):
         game.return_dwarfs(state)
         game.harvest(state)
         state.round += 1
 
-    #evaluations = {action: minmax(game, game.take(action, state), player)[1] for action in available_actions(game, state)}
+    if game.over(state):
+        return None, game.score(state, player), 1
+
+    f = max if game.current_player(state) == player else min
+    #v = -1000000 if game.current_player(state) == player else 1000000
     evaluations = {}
+    nn = 0
     for action in available_actions(game, state):
-        #print("{} Decending into {}".format(state.round, action))
-        evaluations[action] = minmax(game, game.take(action, state), player)[1]
-    best = max(evaluations, key=evaluations.get)
-    return best, evaluations[best]
+        a, e, n = minmax(game, game.take(action, state), player)
+        evaluations[action] = e
+        nn += n
+    
+    #print("{}".format(f.__name__))
+    best = f(evaluations, key=evaluations.get)
+    return best, evaluations[best], nn
 
 
 class MinMax(Controller):
     def select_action(self, game, state):
-        action, evaluation = minmax(game, state, self.player)
+        action, evaluation, n = minmax(game, state, self.player)
+        print(n)
         return action
 
 
