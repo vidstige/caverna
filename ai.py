@@ -2,10 +2,14 @@ from typing import List, Tuple
 import random
 from caverna import *
 
+
 inf = 2 ** 64
 
 
 def minmax(game: Game, state: Game.State, player: Player, d: int, alpha: int, beta: int) -> Tuple[Action, int]:
+    def heuristic(action: Action):
+        return -sum(state.action_resources.get(action, {}).values())
+
     if d <= 0:
         return None, game.score(state, player), 1
 
@@ -21,7 +25,8 @@ def minmax(game: Game, state: Game.State, player: Player, d: int, alpha: int, be
     f = max if maximizing else min
     evaluations = {}
     nn = 0
-    for action in available_actions(game, state):
+    actions = available_actions(game, state)
+    for action in sorted(actions, key=heuristic):
         a, e, n = minmax(game, game.take(action, state), player, d-1, alpha, beta)
         if maximizing:
             alpha = f(alpha, e)
@@ -38,10 +43,12 @@ def minmax(game: Game, state: Game.State, player: Player, d: int, alpha: int, be
 
 
 class MinMax(Controller):
+    total = 0
     def select_action(self, game, state):
-        depth = 4
+        depth = 5
         action, _, n = minmax(game, state, self.player, depth, -inf, inf)
-        #print(n)
+        print(n)
+        self.total += n
         return action
 
 

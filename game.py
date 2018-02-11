@@ -31,9 +31,9 @@ def main():
     for player in game.players:
         name = player
         score = game.score(state, player)
-        print(state.player_states[player].resources)
         print("{name}: {score}".format(name=name, score=score))
-
+        print(state.player_states[player].resources)
+    print(controllers[samuel].total)
 
 if __name__ == "__main__":
     main()
