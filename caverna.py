@@ -205,7 +205,14 @@ class Game(object):
     
     def harvest(self, state: State):
         # Harvest crops
-        pass
+        for ps in state.player_states.values():
+            for tc, tile in ps.tiles.items():
+                field_resources = ps.field_resources.get(tc, {})
+                for r in field_resources:
+                    if field_resources[r] > 0:
+                        field_resources[r] -= 1
+                        ps.resources[r] += 1
+                    
 
         # Feed dwarfs
         for player in self.players:
