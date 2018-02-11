@@ -36,8 +36,7 @@ def minmax(game: Game, state: Game.State, player: Player, d: int, alpha: int, be
         nn += n
         if beta <= alpha:
             break
-    
-    #print("{}".format(f.__name__))
+
     best = f(evaluations, key=evaluations.get)
     return best, evaluations[best], nn
 
@@ -45,7 +44,7 @@ def minmax(game: Game, state: Game.State, player: Player, d: int, alpha: int, be
 class MinMax(Controller):
     total = 0
     def select_action(self, game, state):
-        depth = 5
+        depth = 4
         action, _, n = minmax(game, state, self.player, depth, -inf, inf)
         print(n)
         self.total += n

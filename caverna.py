@@ -135,6 +135,11 @@ class Game(object):
             Action("Ruby Mining", dict(ruby=(1, 1))),
             Action("House Work", dict(), actions=[self.furinsh_cavern]),
             Action("Slash and Burn", dict(), tiles=(Outdoor,), actions=[self.sow]),
+
+            # TODO: These should be randomized
+            Action("Sheep Farming", dict(sheep=(1,1)), actions=[self.build_pastry, self.build_stable]),
+            Action("Blacksmithing", dict(), actions=[self.equip, self.expedition]),
+            Action("Ore mine construction", dict()),
         ]
         self.players = players
 
@@ -147,6 +152,18 @@ class Game(object):
         return self.players[state.current]
 
     # action functions
+    def equip(self, player: Player, state: State):
+        pass
+
+    def expedition(self, player: Player, state: State):
+        pass
+
+    def build_pastry(self, player: Player, state: State):
+        pass
+
+    def build_stable(self, player: Player, state: State):
+        pass
+
     def starting_player(self, player: Player, state: State):
         # sets the current player to starting player
         state.starting = self.players.index(player)
@@ -243,9 +260,11 @@ class Game(object):
         return state.round > 8
 
     def score(self, state: State, player: Player):
+        animals = ('sheep', 'donkey')
         ps = state.player_states[player]
         return \
             (ps.resources.get('wheat', 0) + sum(r.get('wheat', 0) for r in ps.field_resources.values()) + 1) // 2 + \
+            sum(ps.resources.get(a, 0) for a in animals) + \
             ps.resources.get('coin', 0) + \
             ps.resources.get('ruby', 0) + \
             (len(ps.tiles) - 24) + \

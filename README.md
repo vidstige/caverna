@@ -23,6 +23,7 @@ Caverna game logic in python
   - [ ] rooms
 - [ ] spend rubies
 - [ ] expeditions
+- [ ] random action round 4+
 
 ## Getting started
 1. Clone repo
