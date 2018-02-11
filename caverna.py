@@ -10,8 +10,11 @@ class Tile(object):
     def parts(self):
         yield self
 
+    def __deepcopy__(self, memo):
+        return self  # don't copy
 
-class TwinTile(object):
+
+class TwinTile(Tile):
     def __init__(self, left: Tile, right: Tile):
         self.left = left
         self.right = right
@@ -44,8 +47,9 @@ class Player(str):
 class PlayerState(object):
     def __init__(self):
         self.dwarfs = [0, 0]
-        self.resources = defaultdict(lambda: 0, food=2)
+        self.resources = defaultdict(lambda: 0, food=2)  # resources on hand
         self.tiles = {(3, 2): Excavated, (3, 3): EntryLevelDwelling}
+        self.field_resources = {}  # mapping from coordinate -> resources dict
 
 
 class Action(object):
@@ -77,7 +81,7 @@ TILE_ORDER = [
     (1, 1), (1, 2),
 ]
 
-def next_free(tiles: List[Tuple[int, int]]) -> Tuple[int, int]:
+def next_free(tiles: Dict[Tuple[int, int], Tile]) -> Tuple[int, int]:
     for p in TILE_ORDER:
         if p not in tiles:
             return p
@@ -91,6 +95,16 @@ def autoplace(player_state: PlayerState, tiles: Tuple[Tile]):
         p = next_free(player_state.tiles)
         if p:
             player_state.tiles[p] = t
+
+
+FIELD_GAIN = {'wheat': 2, 'vegetable': 1}
+def sow(ps: PlayerState, resource_name: str):
+    """If possible, sows one resource_name from hand to empty field"""
+    # coordinate of next free Field tile
+    empty_field = next((tc for tc, tile in ps.tiles.items() if tile == Field and not ps.field_resources.get(tc)), None)    
+    if empty_field and ps.resources[resource_name] > 0:
+        ps.resources[resource_name] -= 1
+        ps.field_resources[empty_field] = {resource_name: 1 + FIELD_GAIN[resource_name]}
 
 
 class Game(object):
@@ -139,9 +153,10 @@ class Game(object):
 
     def sow(self, player: Player, state: State):
         ps = state.player_states[player]
-        
-        
-        pass
+        sow(ps, 'wheat')
+        sow(ps, 'wheat')
+        sow(ps, 'vegetable')
+        sow(ps, 'vegetable')
 
     def furinsh_cavern(self, player: Player, state: State):
         pass
@@ -223,7 +238,7 @@ class Game(object):
     def score(self, state: State, player: Player):
         ps = state.player_states[player]
         return \
-            (ps.resources.get('wheat', 0) + 1) // 2 + \
+            (ps.resources.get('wheat', 0) + sum(r.get('wheat', 0) for r in ps.field_resources.values()) + 1) // 2 + \
             ps.resources.get('coin', 0) + \
             ps.resources.get('ruby', 0) + \
             (len(ps.tiles) - 24) + \
