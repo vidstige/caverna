@@ -16,8 +16,8 @@ Caverna game logic in python
   - [x] tiles
   - [x] rubies
   - [x] wheat
-  - [ ] vegetables
-  - [ ] animals
+  - [x] vegetables
+  - [x] animals
   - [ ] pastries
   - [ ] mines
   - [ ] rooms

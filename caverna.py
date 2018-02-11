@@ -232,7 +232,6 @@ class Game(object):
                     if field_resources[r] > 0:
                         field_resources[r] -= 1
                         ps.resources[r] += 1
-                    
 
         # Feed dwarfs
         for player in self.players:
@@ -268,7 +267,8 @@ class Game(object):
     def score(self, state: State, player: Player):
         ps = state.player_states[player]
         return \
-            (ps.resources.get('wheat', 0) + sum(r.get('wheat', 0) for r in ps.field_resources.values()) + 1) // 2 + \
+            (ps.resources['wheat'] + sum(r.get('wheat', 0) for r in ps.field_resources.values()) + 1) // 2 + \
+            ps.resources['vegetable'] + sum(r.get('vegetable', 0) for r in ps.field_resources.values()) + \
             sum(ps.resources.get(a, 0) for a in ANIMALS) + \
             ps.resources.get('coin', 0) + \
             ps.resources.get('ruby', 0) + \
