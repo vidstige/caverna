@@ -107,6 +107,9 @@ def sow(ps: PlayerState, resource_name: str):
         ps.field_resources[empty_field] = {resource_name: 1 + FIELD_GAIN[resource_name]}
 
 
+ANIMALS = ('dog', 'sheep', 'donkey', 'boar', 'cow')
+
+
 class Game(object):
     class State(object):
         """Encompasses and entire game state"""
@@ -236,7 +239,10 @@ class Game(object):
             pass
 
         # Breed animals
-        pass
+        for ps in state.player_states.values():
+            for animal in ANIMALS:
+                if ps.resources[animal] >= 2:
+                    ps.resources[animal] += 1
 
         self.replenish(state)
 
@@ -260,11 +266,10 @@ class Game(object):
         return state.round > 8
 
     def score(self, state: State, player: Player):
-        animals = ('sheep', 'donkey')
         ps = state.player_states[player]
         return \
             (ps.resources.get('wheat', 0) + sum(r.get('wheat', 0) for r in ps.field_resources.values()) + 1) // 2 + \
-            sum(ps.resources.get(a, 0) for a in animals) + \
+            sum(ps.resources.get(a, 0) for a in ANIMALS) + \
             ps.resources.get('coin', 0) + \
             ps.resources.get('ruby', 0) + \
             (len(ps.tiles) - 24) + \

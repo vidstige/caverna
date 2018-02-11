@@ -7,7 +7,7 @@ Caverna game logic in python
 - [x] random choice ai
 - [x] minmax search ai
 - [x] sow crops
-- [ ] breed animals
+- [x] breed animals
 - [ ] furnish caverns
   - [ ] dwelling
   - [ ]
