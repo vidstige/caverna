@@ -41,7 +41,7 @@ class MinMax(Controller):
     def select_action(self, game, state):
         depth = 4
         action, _, n = minmax(game, state, self.player, depth, -inf, inf)
-        print(n)
+        #print(n)
         return action
 
 

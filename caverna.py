@@ -1,4 +1,5 @@
 from typing import Dict, List, Tuple
+from collections import defaultdict
 from copy import deepcopy
 
 class Tile(object):
@@ -43,7 +44,7 @@ class Player(str):
 class PlayerState(object):
     def __init__(self):
         self.dwarfs = [0, 0]
-        self.resources = dict(food=2)
+        self.resources = defaultdict(lambda: 0, food=2)
         self.tiles = {(3, 2): Excavated, (3, 3): EntryLevelDwelling}
 
 
@@ -133,9 +134,13 @@ class Game(object):
 
     # action functions
     def starting_player(self, player: Player, state: State):
+        # sets the current player to starting player
         state.starting = self.players.index(player)
 
     def sow(self, player: Player, state: State):
+        ps = state.player_states[player]
+        
+        
         pass
 
     def furinsh_cavern(self, player: Player, state: State):
@@ -210,8 +215,6 @@ class Game(object):
     def gain_resources(self, state: State, action: Action, player: Player) -> None:
         action_resources = state.action_resources.pop(action, {})
         for resource, count in action_resources.items():
-            if resource not in state.player_states[player].resources:
-                state.player_states[player].resources[resource] = 0
             state.player_states[player].resources[resource] += count
 
     def over(self, state: State):
