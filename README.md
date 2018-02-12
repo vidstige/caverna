@@ -8,9 +8,11 @@ Caverna game logic in python
 - [x] minmax search ai
 - [x] sow crops
 - [x] breed animals
+- [ ] pay for food
 - [ ] furnish caverns
   - [ ] dwelling
-  - [ ]
+  - [ ] extra points
+  - [ ] special caverns
 - [ ] points for
   - [x] dwarfs
   - [x] tiles
@@ -23,7 +25,7 @@ Caverna game logic in python
   - [ ] rooms
 - [ ] spend rubies
 - [ ] expeditions
-- [ ] random action round 4+
+- [ ] randomize action flip actions
 
 ## Getting started
 1. Clone repo
