@@ -138,7 +138,8 @@ class Game(object):
             Action("Ruby Mining", dict(ruby=(1, 1))),
             Action("House Work", dict(), actions=[self.furinsh_cavern]),
             Action("Slash and Burn", dict(), tiles=(Outdoor,), actions=[self.sow]),
-
+        ]
+        self.flip_actions = [
             # TODO: These should be randomized
             Action("Sheep Farming", dict(sheep=(1,1)), actions=[self.build_pastry, self.build_stable]),
             Action("Blacksmithing", dict(), actions=[self.equip, self.expedition]),
@@ -245,8 +246,13 @@ class Game(object):
 
         self.replenish(state)
 
+    def get_actions(self, state: State):
+        """All actions, including flipped ones"""
+        yield from self.actions
+        yield from self.flip_actions[:state.round]
+
     def replenish(self, state: State):
-        for action in self.actions:
+        for action in self.get_actions(state):
             for resource, rc in action.resources.items():
                 initial, per_round = rc
                 current = state.action_resources.get(action, {})
@@ -277,7 +283,7 @@ class Game(object):
 
 
 def available_actions(game, state):
-    return [a for a in game.actions if a not in state.dwarfs]
+    return [a for a in game.get_actions(state) if a not in state.dwarfs]
 
 
 class Controller(object):
