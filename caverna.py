@@ -107,6 +107,7 @@ def sow(ps: PlayerState, resource_name: str):
         ps.field_resources[empty_field] = {resource_name: 1 + FIELD_GAIN[resource_name]}
 
 
+FARM_ANIMALS = ('sheep', 'donkey', 'boar', 'cow')
 ANIMALS = ('dog', 'sheep', 'donkey', 'boar', 'cow')
 
 
@@ -250,7 +251,7 @@ class Game(object):
 
         # Breed animals
         for ps in state.player_states.values():
-            for animal in ANIMALS:
+            for animal in FARM_ANIMALS:
                 if ps.resources[animal] >= 2:
                     ps.resources[animal] += 1
 
@@ -288,6 +289,7 @@ class Game(object):
         return \
             (ps.resources['wheat'] + sum(r.get('wheat', 0) for r in ps.field_resources.values()) + 1) // 2 + \
             ps.resources['vegetable'] + sum(r.get('vegetable', 0) for r in ps.field_resources.values()) + \
+            sum(-2 for animal in FARM_ANIMALS if ps.resources[animal] == 0) + \
             sum(ps.resources.get(a, 0) for a in ANIMALS) + \
             ps.resources.get('coin', 0) + \
             ps.resources.get('ruby', 0) + \
