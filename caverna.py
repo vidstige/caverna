@@ -136,7 +136,7 @@ class Game(object):
             Action("Sustenance", dict(food=(1, 1), wheat=(1, 0)), tiles=(Outdoor,)),
 
             Action("Ruby Mining", dict(ruby=(1, 1))),
-            Action("House Work", dict(), actions=[self.furinsh_cavern]),
+            Action("House Work", dict(dog=(1, 0)), actions=[self.furinsh_cavern]),
             Action("Slash and Burn", dict(), tiles=(Outdoor,), actions=[self.sow]),
         ]
         self.flip_actions = [
@@ -245,7 +245,7 @@ class Game(object):
                         ps.resources[r] += 1
 
         # Feed dwarfs
-        for player in self.players:
+        for ps in state.player_states.values():
             pass
 
         # Breed animals
@@ -281,7 +281,7 @@ class Game(object):
             state.player_states[player].resources[resource] += count
 
     def over(self, state: State):
-        return state.round > 8
+        return state.round > 12
 
     def score(self, state: State, player: Player):
         ps = state.player_states[player]
