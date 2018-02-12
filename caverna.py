@@ -144,6 +144,10 @@ class Game(object):
             Action("Sheep Farming", dict(sheep=(1,1)), actions=[self.build_pastry, self.build_stable]),
             Action("Blacksmithing", dict(), actions=[self.equip, self.expedition]),
             Action("Ore mine construction", dict()),
+
+            Action("Wish for children", dict(), actions=[self.copulate]),
+            Action("Ruby mine construction", dict(), actions=[self.build_ruby_mine]),
+            Action("Donkey Farming", dict(donkey=(1,1)), actions=[self.build_pastry, self.build_stable]),
         ]
         self.players = players
 
@@ -156,6 +160,12 @@ class Game(object):
         return self.players[state.current]
 
     # action functions
+    def build_ruby_mine(self, player: Player, state: State):
+        pass
+
+    def copulate(self, player: Player, state: State):
+        pass
+
     def equip(self, player: Player, state: State):
         pass
 

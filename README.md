@@ -9,6 +9,7 @@ Caverna game logic in python
 - [x] sow crops
 - [x] breed animals
 - [ ] pay for food
+- [ ] avoid un-accessible actions (wish for children with no room)
 - [ ] furnish caverns
   - [ ] dwelling
   - [ ] extra points
