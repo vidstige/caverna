@@ -26,7 +26,6 @@ def main():
     while not game.over(state):
         print("Round {}".format(state.round))
         state = play_round(game, state, controllers)
-        state.round += 1
 
     for player in game.players:
         name = player

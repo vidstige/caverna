@@ -245,6 +245,9 @@ class Game(object):
                     ps.resources[animal] += 1
 
         self.replenish(state)
+        
+        # advance round
+        state.round += 1
 
     def get_actions(self, state: State):
         """All actions, including flipped ones"""

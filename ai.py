@@ -16,7 +16,6 @@ def minmax(game: Game, state: Game.State, player: Player, d: int, alpha: int, be
     if not game.round(state):
         game.return_dwarfs(state)
         game.harvest(state)
-        state.round += 1
 
     if game.over(state):
         return None, game.score(state, player), 1
