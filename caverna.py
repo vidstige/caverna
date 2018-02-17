@@ -66,6 +66,12 @@ class Action(object):
     def __deepcopy__(self, memo):
         return self  # don't copy
 
+
+class Round(object):
+    def __init__(self, food_per_dwarf: int, harvest: bool):
+        self.food_per_dwarf = food_per_dwarf
+        self.harvest = harvest
+
 # Tile autoplacing
 
 # 433xxx
@@ -149,6 +155,11 @@ class Game(object):
             Action("Wish for children", dict(), actions=[self.copulate]),
             Action("Ruby mine construction", dict(), actions=[self.build_ruby_mine]),
             Action("Donkey Farming", dict(donkey=(1,1)), actions=[self.build_pastry, self.build_stable]),
+        ]
+        self.rounds = [
+            Round(0, False), Round(0, False), Round(2, True), Round(1, False),
+            Round(2, True), Round(2, True), Round(2, True), Round(2, True),
+            Round(2, True), Round(2, True), Round(2, True), Round(2, True)
         ]
         self.players = players
 
@@ -235,6 +246,10 @@ class Game(object):
             state.player_states[player].dwarfs.append(dwarf)
         state.dwarfs = {}
     
+    def round(self, state: State):
+        """Returns current round"""
+        return self.rounds[state.round]
+
     def harvest(self, state: State):
         # Harvest crops
         for ps in state.player_states.values():
