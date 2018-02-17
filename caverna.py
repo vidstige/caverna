@@ -193,7 +193,7 @@ class Game(object):
     def furinsh_cavern(self, player: Player, state: State):
         pass
 
-    def round(self, state: State):
+    def work_phase(self, state: State):
         """Whether the dwarf placing phase is still ongoing"""
         return any(ps.dwarfs for ps in state.player_states.values())
 
@@ -220,7 +220,7 @@ class Game(object):
             autoplace(state.player_states[player], action.tiles)
 
         # next player
-        if self.round(state):
+        if self.work_phase(state):
             # find next player with dwarfs left
             state.current = (state.current + 1) % len(self.players)
             while not state.player_states[self.players[state.current]].dwarfs:

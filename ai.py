@@ -13,7 +13,7 @@ def minmax(game: Game, state: Game.State, player: Player, d: int, alpha: int, be
     if d <= 0:
         return None, game.score(state, player), 1
 
-    if not game.round(state):
+    if not game.work_phase(state):
         game.return_dwarfs(state)
         game.harvest(state)
 

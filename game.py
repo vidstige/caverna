@@ -5,7 +5,7 @@ import ai
 
 def play_round(game: Game, state: Game.State, controllers: Dict[Player, Controller]) -> None:
     # Take actions while any player has dwarfs
-    while game.round(state):
+    while game.work_phase(state):
         player = game.current_player(state)
         action = controllers[player].select_action(game, state)
         print("{} selects {}".format(player, action.name))
