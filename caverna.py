@@ -263,7 +263,12 @@ class Game(object):
 
         # Feed dwarfs
         for ps in state.player_states.values():
-            pass
+            per_dwarf = self.round(state).food_per_dwarf
+            ps.resources['food'] -= len(ps.dwarfs) * per_dwarf
+            # take begging tokens as needed
+            if ps.resources['food'] < 0:
+                ps.resources['begging'] += -ps.resources['food']
+                ps.resources['food'] = 0
 
         if self.round(state).harvest:
             # Breed animals
@@ -304,6 +309,7 @@ class Game(object):
     def score(self, state: State, player: Player):
         ps = state.player_states[player]
         return \
+            ps.resources['begging'] * -3 + \
             (ps.resources['wheat'] + sum(r.get('wheat', 0) for r in ps.field_resources.values()) + 1) // 2 + \
             ps.resources['vegetable'] + sum(r.get('vegetable', 0) for r in ps.field_resources.values()) + \
             sum(-2 for animal in FARM_ANIMALS if ps.resources[animal] == 0) + \
