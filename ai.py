@@ -6,12 +6,22 @@ from caverna import *
 inf = 2 ** 64
 
 
+def evaluate(game: Game, state: Game.State, player: Player):
+    #return sum(v for k, v in state.player_states[player].resources.items() if k in ('food', 'wheat', 'sheep', 'donkey', 'ruby'))
+    #return game.score(state, player)
+    ps = state.player_states[player]
+    w = defaultdict(int, food=4, ruby=2, sheep=1, donkey=1, wheat=2)
+    return sum(r.get('wheat', 0) for r in ps.field_resources.values()) * 4 \
+        + sum(w[k] * v for k, v in ps.resources.items())
+
+
 def minmax(game: Game, state: Game.State, player: Player, d: int, alpha: int, beta: int) -> Tuple[Action, int]:
     def heuristic(action: Action):
-        return -sum(state.action_resources.get(action, {}).values())
+        return 1
+        #return -sum(state.action_resources.get(action, {}).values())
 
     if d <= 0:
-        return None, game.score(state, player), 1
+        return None, evaluate(game, state, player), 1
 
     if game.over(state):
         return None, game.score(state, player), 1
@@ -43,7 +53,7 @@ def minmax(game: Game, state: Game.State, player: Player, d: int, alpha: int, be
 class MinMax(Controller):
     total = 0
     def select_action(self, game, state):
-        depth = 3
+        depth = 4
         action, _, n = minmax(game, state, self.player, depth, -inf, inf)
         print(n)
         self.total += n
