@@ -251,24 +251,26 @@ class Game(object):
         return self.rounds[state.round]
 
     def harvest(self, state: State):
-        # Harvest crops
-        for ps in state.player_states.values():
-            for tc, tile in ps.tiles.items():
-                field_resources = ps.field_resources.get(tc, {})
-                for r in field_resources:
-                    if field_resources[r] > 0:
-                        field_resources[r] -= 1
-                        ps.resources[r] += 1
+        if self.round(state).harvest:
+            # Harvest crops
+            for ps in state.player_states.values():
+                for tc, tile in ps.tiles.items():
+                    field_resources = ps.field_resources.get(tc, {})
+                    for r in field_resources:
+                        if field_resources[r] > 0:
+                            field_resources[r] -= 1
+                            ps.resources[r] += 1
 
         # Feed dwarfs
         for ps in state.player_states.values():
             pass
 
-        # Breed animals
-        for ps in state.player_states.values():
-            for animal in FARM_ANIMALS:
-                if ps.resources[animal] >= 2:
-                    ps.resources[animal] += 1
+        if self.round(state).harvest:
+            # Breed animals
+            for ps in state.player_states.values():
+                for animal in FARM_ANIMALS:
+                    if ps.resources[animal] >= 2:
+                        ps.resources[animal] += 1
 
         self.replenish(state)
         
@@ -297,7 +299,7 @@ class Game(object):
             state.player_states[player].resources[resource] += count
 
     def over(self, state: State):
-        return state.round > 12
+        return state.round >= 12
 
     def score(self, state: State, player: Player):
         ps = state.player_states[player]
