@@ -23,12 +23,12 @@ impl ActionSpace {
 
     fn initial(self) -> Resources {
         match self {
-            ActionSpace::Logging        => Resources { wood: 1, ..Resources::zero() },
+            ActionSpace::Logging        => Resources { wood: 3, ..Resources::zero() },
             ActionSpace::WoodGathering  => Resources { wood: 1, ..Resources::zero() },
-            ActionSpace::Supplies       => Resources { wood: 1, stone: 1, food: 2, ..Resources::zero() },
-            ActionSpace::StartingPlayer => Resources::zero(),
+            ActionSpace::Supplies       => Resources { wood: 1, stone: 1, coal: 1, food: 1, points: 2, ..Resources::zero() },
+            ActionSpace::StartingPlayer => Resources { coal: 2, ..Resources::zero() },
             ActionSpace::Clearing       => Resources { wood: 1, ..Resources::zero() },
-            ActionSpace::Sustenance     => Resources { food: 1, ..Resources::zero() },
+            ActionSpace::Sustenance     => Resources { wheat: 1, ..Resources::zero() },
         }
     }
     fn per_round(self) -> Resources {
@@ -36,7 +36,7 @@ impl ActionSpace {
             ActionSpace::Logging        => Resources { wood: 1, ..Resources::zero() },
             ActionSpace::WoodGathering  => Resources { wood: 1, ..Resources::zero() },
             ActionSpace::Supplies       => Resources::zero(),
-            ActionSpace::StartingPlayer => Resources::zero(),
+            ActionSpace::StartingPlayer => Resources { food: 1, ..Resources::zero() },
             ActionSpace::Clearing       => Resources { wood: 1, ..Resources::zero() },
             ActionSpace::Sustenance     => Resources { food: 1, ..Resources::zero() },
         }
