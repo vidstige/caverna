@@ -10,9 +10,11 @@ pub enum ActionSpace {
     Clearing = 4,
     Sustenance = 5,
     SlashAndBurn = 6,
+    DriftMining = 7,
+    Excavation = 8,
 }
 impl ActionSpace {
-    const COUNT: usize = 7;
+    const COUNT: usize = 9;
     const ALL: [ActionSpace; Self::COUNT] = [
         ActionSpace::Logging,
         ActionSpace::WoodGathering,
@@ -21,6 +23,8 @@ impl ActionSpace {
         ActionSpace::Clearing,
         ActionSpace::Sustenance,
         ActionSpace::SlashAndBurn,
+        ActionSpace::DriftMining,
+        ActionSpace::Excavation,
     ];
 
     fn gain_resources(self, rounds: u32, resources: &mut Resources) {
@@ -36,14 +40,19 @@ impl ActionSpace {
             ActionSpace::Clearing       => resources.wood += 1 + r,
             ActionSpace::Sustenance     => { resources.wheat += 1; resources.food += r; }
             ActionSpace::SlashAndBurn   => {}
+            ActionSpace::DriftMining    => resources.stone += 1 + r,
+            ActionSpace::Excavation     => resources.stone += 1 + r,
         }
     }
-    fn place_tile(self) -> Option<TileToPlace> {
+    fn place_tile(self) -> Vec<TileToPlace> {
         match self {
-            ActionSpace::Clearing => Some(TileToPlace::Twin((Tile::Meadow, Tile::Field((0, 0))))),
-            ActionSpace::Sustenance => Some(TileToPlace::Twin((Tile::Meadow, Tile::Field((0, 0))))),
-            ActionSpace::SlashAndBurn => Some(TileToPlace::Twin((Tile::Meadow, Tile::Field((0, 0))))),
-            _ => None,
+            ActionSpace::Clearing | ActionSpace::Sustenance | ActionSpace::SlashAndBurn =>
+                vec![TileToPlace::Twin((Tile::Meadow, Tile::Field((0, 0))))],
+            ActionSpace::DriftMining =>
+                vec![TileToPlace::Twin((Tile::Tunnel, Tile::Cave))],
+            ActionSpace::Excavation =>
+                vec![TileToPlace::Twin((Tile::Tunnel, Tile::Cave)), TileToPlace::Twin((Tile::Cave, Tile::Cave))],
+            _ => vec![],
         }
     }
 }
@@ -65,8 +74,19 @@ enum Tile {
     Field((u8, u8)), // (wheat, vegetables) — only one non-zero at a time
     // Indoor
     Mountain,
-    Cavern,
+    Tunnel,
+    Cave,
     Dwelling,
+}
+
+impl Tile {
+    fn base(self) -> Tile {
+        match self {
+            Tile::Meadow | Tile::Field(_) => Tile::Forest,
+            Tile::Tunnel | Tile::Cave | Tile::Dwelling => Tile::Mountain,
+            Tile::Forest | Tile::Mountain => self,
+        }
+    }
 }
 
 enum TileToPlace {
@@ -144,7 +164,7 @@ impl Player {
             }
         }
         tiles[3][3] = Tile::Dwelling;
-        tiles[2][3] = Tile::Cavern;
+        tiles[2][3] = Tile::Cave;
         let mut player = Player {
             dwarfs: vec![Dwarf { weapon: 0, placed_on: None }, Dwarf { weapon: 0, placed_on: None }],
             tiles,
@@ -155,22 +175,19 @@ impl Player {
         player
     }
 
-    fn adjacent_to_placed(&self, x: usize, y: usize) -> bool {
-        adjacents(x, y).any(|(nx, ny)| matches!(self.tiles[ny][nx], Tile::Meadow | Tile::Field(_)))
+    fn adjacent_to_developed(&self, x: usize, y: usize, base: Tile) -> bool {
+        adjacents(x, y).any(|(nx, ny)| self.tiles[ny][nx] != base)
     }
 
     fn tile_placements(&self, tile: TileToPlace) -> Vec<[[Tile; BOARD_WIDTH]; BOARD_HEIGHT]> {
-        let has_placed = self.tiles.iter().flatten()
-            .any(|&t| matches!(t, Tile::Meadow | Tile::Field(_)));
         let mut result = vec![];
         match tile {
             TileToPlace::Single(t) => {
+                let base = t.base();
                 for y in 0..BOARD_HEIGHT {
                     for x in 0..BOARD_WIDTH {
-                        if self.tiles[y][x] != Tile::Forest { continue; }
-                        let valid = if !has_placed { x == 2 && y == 3 }
-                                    else { self.adjacent_to_placed(x, y) };
-                        if valid {
+                        if self.tiles[y][x] != base { continue; }
+                        if self.adjacent_to_developed(x, y, base) {
                             let mut board = self.tiles;
                             board[y][x] = t;
                             result.push(board);
@@ -179,15 +196,18 @@ impl Player {
                 }
             }
             TileToPlace::Twin((t1, t2)) => {
+                let base = t1.base();
+                let outdoor_first = base == Tile::Forest
+                    && !self.tiles.iter().flatten().any(|&t| matches!(t, Tile::Meadow | Tile::Field(_)));
                 for y in 0..BOARD_HEIGHT {
                     for x in 0..BOARD_WIDTH {
                         for (x2, y2) in [(x + 1, y), (x, y + 1)] {
                             if x2 >= BOARD_WIDTH || y2 >= BOARD_HEIGHT { continue; }
-                            if self.tiles[y][x] != Tile::Forest || self.tiles[y2][x2] != Tile::Forest { continue; }
-                            let valid = if !has_placed {
+                            if self.tiles[y][x] != base || self.tiles[y2][x2] != base { continue; }
+                            let valid = if outdoor_first {
                                 (x == 2 && y == 3) || (x2 == 2 && y2 == 3)
                             } else {
-                                self.adjacent_to_placed(x, y) || self.adjacent_to_placed(x2, y2)
+                                self.adjacent_to_developed(x, y, base) || self.adjacent_to_developed(x2, y2, base)
                             };
                             if valid {
                                 let mut board = self.tiles;
@@ -388,19 +408,22 @@ impl GameState for State {
                 .placed_on = Some(space);
             space.gain_resources(child.accumulated[space as usize], &mut child.players[current].resources);
 
-            let mut candidates = if let Some(tile) = space.place_tile() {
-                let boards = child.players[current].tile_placements(tile);
-                if boards.is_empty() {
-                    vec![child]
-                } else {
-                    boards.into_iter().map(|board| {
-                        let mut c = child.clone();
-                        c.players[current].tiles = board;
-                        c
-                    }).collect()
-                }
-            } else {
+            let tile_choices = space.place_tile();
+            let mut candidates = if tile_choices.is_empty() {
                 vec![child]
+            } else {
+                tile_choices.into_iter().flat_map(|tile| {
+                    let boards = child.players[current].tile_placements(tile);
+                    if boards.is_empty() {
+                        vec![child.clone()]
+                    } else {
+                        boards.into_iter().map(|board| {
+                            let mut c = child.clone();
+                            c.players[current].tiles = board;
+                            c
+                        }).collect()
+                    }
+                }).collect()
             };
 
             if space == ActionSpace::SlashAndBurn {
