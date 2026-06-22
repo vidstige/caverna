@@ -103,18 +103,40 @@ impl State {
         }
         State { players, round: 0, starting_player: 0 }
     }
-    fn rounds(self) -> u32 {
-        // for two players
-        12
+    fn rounds(&self) -> u32 {
+        match self.players.len() {
+            2 => 11,
+            _ => 12,
+        }
     }
-    fn done(self) -> bool {
-        self.round >= self.rounds() - 1
+    fn done(&self) -> bool {
+        self.round >= self.rounds()
     }
 }
 
 impl GameState for State {
     fn current_player(&self) -> usize {
-        0
+        let n = self.players.len();
+        let placed: Vec<usize> = self.players.iter()
+            .map(|p| p.dwarfs.iter().filter(|d| d.placed_on.is_some()).count())
+            .collect();
+        let total_placed: usize = placed.iter().sum();
+        let total_dwarves: Vec<usize> = self.players.iter().map(|p| p.dwarfs.len()).collect();
+
+        // Replay the clockwise turn sequence to find who goes next.
+        // Each step advances past a player who still has dwarves to place.
+        let mut turns = 0;
+        let mut seat = self.starting_player as usize;
+        for _ in 0..=(total_dwarves.iter().sum::<usize>()) {
+            if placed[seat] < total_dwarves[seat] {
+                if turns == total_placed {
+                    return seat;
+                }
+                turns += 1;
+            }
+            seat = (seat + 1) % n;
+        }
+        panic!("current_player called when all dwarves are placed");
     }
 
     fn num_players(&self) -> usize {
@@ -126,6 +148,12 @@ impl GameState for State {
     }
 
     fn winner(&self) -> Option<usize> {
-        todo!()
+        if !self.done() {
+            return None;
+        }
+        self.players.iter()
+            .enumerate()
+            .max_by_key(|(_, p)| p.points())
+            .map(|(i, _)| i)
     }
 }
