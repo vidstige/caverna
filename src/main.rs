@@ -1,5 +1,7 @@
 mod caverna;
 mod mcts;
+#[cfg(test)]
+mod test_caverna;
 
 use crate::{
     caverna::State,

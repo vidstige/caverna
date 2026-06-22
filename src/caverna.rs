@@ -323,18 +323,6 @@ impl GameState for State {
             return vec![];
         }
 
-        let all_placed = self.players.iter()
-            .all(|p| p.dwarfs.iter().all(|d| d.placed_on.is_some()));
-
-        if all_placed {
-            let mut next = self.clone();
-            next.return_dwarfs();
-            next.feeding();
-            next.round += 1;
-            next.replenish();
-            return vec![next];
-        }
-
         let current = self.current_player();
         let mut children = vec![];
         for &space in &ActionSpace::ALL {
@@ -350,20 +338,34 @@ impl GameState for State {
                 .placed_on = Some(space);
             child.players[current].resources += child.accumulated[space as usize];
             child.accumulated[space as usize] = Resources::zero();
-            if let Some(tile) = space.place_tile() {
+
+            let mut candidates = if let Some(tile) = space.place_tile() {
                 let boards = child.players[current].tile_placements(tile);
                 if boards.is_empty() {
-                    children.push(child);
+                    vec![child]
                 } else {
-                    for board in boards {
+                    boards.into_iter().map(|board| {
                         let mut c = child.clone();
                         c.players[current].tiles = board;
-                        children.push(c);
-                    }
+                        c
+                    }).collect()
                 }
             } else {
-                children.push(child);
+                vec![child]
+            };
+
+            let all_placed = candidates[0].players.iter()
+                .all(|p| p.dwarfs.iter().all(|d| d.placed_on.is_some()));
+            if all_placed {
+                for c in &mut candidates {
+                    c.return_dwarfs();
+                    c.feeding();
+                    c.round += 1;
+                    c.replenish();
+                }
             }
+
+            children.extend(candidates);
         }
         children
     }
