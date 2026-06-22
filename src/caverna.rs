@@ -9,9 +9,10 @@ pub enum ActionSpace {
     StartingPlayer = 3,
     Clearing = 4,
     Sustenance = 5,
+    SlashAndBurn = 6,
 }
 impl ActionSpace {
-    const COUNT: usize = 6;
+    const COUNT: usize = 7;
     const ALL: [ActionSpace; Self::COUNT] = [
         ActionSpace::Logging,
         ActionSpace::WoodGathering,
@@ -19,6 +20,7 @@ impl ActionSpace {
         ActionSpace::StartingPlayer,
         ActionSpace::Clearing,
         ActionSpace::Sustenance,
+        ActionSpace::SlashAndBurn,
     ];
 
     fn initial(self) -> Resources {
@@ -29,6 +31,7 @@ impl ActionSpace {
             ActionSpace::StartingPlayer => Resources { coal: 2, ..Resources::zero() },
             ActionSpace::Clearing       => Resources { wood: 1, ..Resources::zero() },
             ActionSpace::Sustenance     => Resources { wheat: 1, ..Resources::zero() },
+            ActionSpace::SlashAndBurn   => Resources::zero(),
         }
     }
     fn per_round(self) -> Resources {
@@ -39,12 +42,14 @@ impl ActionSpace {
             ActionSpace::StartingPlayer => Resources { food: 1, ..Resources::zero() },
             ActionSpace::Clearing       => Resources { wood: 1, ..Resources::zero() },
             ActionSpace::Sustenance     => Resources { food: 1, ..Resources::zero() },
+            ActionSpace::SlashAndBurn   => Resources::zero(),
         }
     }
     fn place_tile(self) -> Option<TileToPlace> {
         match self {
-            ActionSpace::Clearing   => Some(TileToPlace::Twin((Tile::Meadow, Tile::Field))),
-            ActionSpace::Sustenance => Some(TileToPlace::Twin((Tile::Meadow, Tile::Field))),
+            ActionSpace::Clearing => Some(TileToPlace::Twin((Tile::Meadow, Tile::Field((0, 0))))),
+            ActionSpace::Sustenance => Some(TileToPlace::Twin((Tile::Meadow, Tile::Field((0, 0))))),
+            ActionSpace::SlashAndBurn => Some(TileToPlace::Twin((Tile::Meadow, Tile::Field((0, 0))))),
             _ => None,
         }
     }
@@ -64,7 +69,7 @@ enum Tile {
     // Outdoor
     Forest,
     Meadow,
-    Field,
+    Field((u8, u8)), // (wheat, vegetables) — only one non-zero at a time
     // Indoor
     Mountain,
     Cavern,
@@ -162,12 +167,12 @@ impl Player {
     }
 
     fn adjacent_to_placed(&self, x: usize, y: usize) -> bool {
-        adjacents(x, y).any(|(nx, ny)| matches!(self.tiles[ny][nx], Tile::Meadow | Tile::Field))
+        adjacents(x, y).any(|(nx, ny)| matches!(self.tiles[ny][nx], Tile::Meadow | Tile::Field(_)))
     }
 
     fn tile_placements(&self, tile: TileToPlace) -> Vec<[[Tile; BOARD_WIDTH]; BOARD_HEIGHT]> {
         let has_placed = self.tiles.iter().flatten()
-            .any(|&t| matches!(t, Tile::Meadow | Tile::Field));
+            .any(|&t| matches!(t, Tile::Meadow | Tile::Field(_)));
         let mut result = vec![];
         match tile {
             TileToPlace::Single(t) => {
@@ -234,6 +239,23 @@ impl Player {
             self.resources.food = 0;
         }
     }
+    fn harvest(&mut self) {
+        for y in 0..BOARD_HEIGHT {
+            for x in 0..BOARD_WIDTH {
+                match self.tiles[y][x] {
+                    Tile::Field((w, _)) if w > 0 => {
+                        self.resources.wheat += 1;
+                        self.tiles[y][x] = Tile::Field((w - 1, 0));
+                    }
+                    Tile::Field((_, v)) if v > 0 => {
+                        self.resources.vegetables += 1;
+                        self.tiles[y][x] = Tile::Field((0, v - 1));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -286,6 +308,52 @@ impl State {
             }
         }
     }
+    fn harvest(&mut self) {
+        for player in &mut self.players {
+            player.harvest();
+        }
+    }
+    fn sow_options(&self, player_idx: usize) -> Vec<Self> {
+        let player = &self.players[player_idx];
+        let empty: Vec<(usize, usize)> = (0..BOARD_HEIGHT)
+            .flat_map(|y| (0..BOARD_WIDTH).map(move |x| (x, y)))
+            .filter(|&(x, y)| player.tiles[y][x] == Tile::Field((0, 0)))
+            .collect();
+        let max_wheat = player.resources.wheat.min(2);
+        let max_veg = player.resources.vegetables.min(2);
+        let mut results = vec![];
+        for wheat in subsets_up_to_2(&empty) {
+            if wheat.len() > max_wheat { continue; }
+            let remaining: Vec<_> = empty.iter().copied()
+                .filter(|s| !wheat.contains(s))
+                .collect();
+            for veg in subsets_up_to_2(&remaining) {
+                if veg.len() > max_veg { continue; }
+                let mut child = self.clone();
+                child.players[player_idx].resources.wheat -= wheat.len();
+                child.players[player_idx].resources.vegetables -= veg.len();
+                for &(x, y) in &wheat {
+                    child.players[player_idx].tiles[y][x] = Tile::Field((3, 0));
+                }
+                for &(x, y) in &veg {
+                    child.players[player_idx].tiles[y][x] = Tile::Field((0, 2));
+                }
+                results.push(child);
+            }
+        }
+        results
+    }
+}
+
+fn subsets_up_to_2(items: &[(usize, usize)]) -> Vec<Vec<(usize, usize)>> {
+    let mut result = vec![vec![]];
+    for i in 0..items.len() {
+        result.push(vec![items[i]]);
+        for j in (i + 1)..items.len() {
+            result.push(vec![items[i], items[j]]);
+        }
+    }
+    result
 }
 
 impl GameState for State {
@@ -354,11 +422,18 @@ impl GameState for State {
                 vec![child]
             };
 
+            if space == ActionSpace::SlashAndBurn {
+                candidates = candidates.into_iter()
+                    .flat_map(|c| c.sow_options(current))
+                    .collect();
+            }
+
             let all_placed = candidates[0].players.iter()
                 .all(|p| p.dwarfs.iter().all(|d| d.placed_on.is_some()));
             if all_placed {
                 for c in &mut candidates {
                     c.return_dwarfs();
+                    c.harvest();
                     c.feeding();
                     c.round += 1;
                     c.replenish();
