@@ -20,10 +20,7 @@ struct CaveTile {
 }
 
 #[derive(Clone)]
-pub struct Player {
-    dwarfs: Vec<u8>,  // weapon level
-
-    // resources
+struct Resources {
     points: usize,
     begging: usize,
 
@@ -35,6 +32,28 @@ pub struct Player {
     
     wheat: usize,
     vegetables: usize,
+}
+impl Resources {
+    fn zero() -> Resources {
+        Resources {
+            points: 0,
+            begging: 0,
+            wood: 0,
+            stone: 0,
+            coal: 0,
+            rubies: 0,
+            food: 0,
+            wheat: 0,
+            vegetables: 0,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Player {
+    dwarfs: Vec<u8>,  // weapon level
+
+    resources: Resources,
 
     dogs: usize,
     sheep: usize,
@@ -44,18 +63,20 @@ pub struct Player {
 }
 impl Player {
     fn new(food: usize) -> Self {
-        Player{
+        let mut player = Player{
             dwarfs: vec![0, 0],
-            points: 0, begging: 0, wood: 0, stone: 0, coal: 0, rubies: 0, food: food,
-            wheat: 0, vegetables: 0, dogs: 0, sheep: 0, boars: 0, donkeys: 0, cows: 0,
-        }
+            resources: Resources::zero(),
+            dogs: 0, sheep: 0, boars: 0, donkeys: 0, cows: 0,
+        };
+        player.resources.food = food;
+        player
     }
     pub fn points(&self) -> usize {
         self.dwarfs.len() +
-        self.points +
-        self.rubies + 
-        self.wheat / 2 + 
-        self.vegetables +
+        self.resources.points +
+        self.resources.rubies + 
+        self.resources.wheat / 2 + 
+        self.resources.vegetables +
         self.dogs + 
         self.sheep + 
         self.boars + 
