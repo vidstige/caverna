@@ -7,32 +7,73 @@ pub enum ActionSpace {
     WoodGathering = 1,
     Supplies = 2,
     StartingPlayer = 3,
+    Clearing = 4,
+    Sustenance = 5,
 }
 impl ActionSpace {
-    const COUNT: usize = 4;
+    const COUNT: usize = 6;
     const ALL: [ActionSpace; Self::COUNT] = [
         ActionSpace::Logging,
         ActionSpace::WoodGathering,
         ActionSpace::Supplies,
         ActionSpace::StartingPlayer,
+        ActionSpace::Clearing,
+        ActionSpace::Sustenance,
     ];
 
     fn initial(self) -> Resources {
         match self {
-            ActionSpace::Logging       => Resources { wood: 1, ..Resources::zero() },
-            ActionSpace::WoodGathering => Resources { wood: 1, ..Resources::zero() },
-            ActionSpace::Supplies      => Resources { wood: 1, stone: 1, food: 2, ..Resources::zero() },
+            ActionSpace::Logging        => Resources { wood: 1, ..Resources::zero() },
+            ActionSpace::WoodGathering  => Resources { wood: 1, ..Resources::zero() },
+            ActionSpace::Supplies       => Resources { wood: 1, stone: 1, food: 2, ..Resources::zero() },
             ActionSpace::StartingPlayer => Resources::zero(),
+            ActionSpace::Clearing       => Resources { wood: 1, ..Resources::zero() },
+            ActionSpace::Sustenance     => Resources { food: 1, ..Resources::zero() },
         }
     }
     fn per_round(self) -> Resources {
         match self {
-            ActionSpace::Logging       => Resources { wood: 1, ..Resources::zero() },
-            ActionSpace::WoodGathering => Resources { wood: 1, ..Resources::zero() },
-            ActionSpace::Supplies      => Resources::zero(),
+            ActionSpace::Logging        => Resources { wood: 1, ..Resources::zero() },
+            ActionSpace::WoodGathering  => Resources { wood: 1, ..Resources::zero() },
+            ActionSpace::Supplies       => Resources::zero(),
             ActionSpace::StartingPlayer => Resources::zero(),
+            ActionSpace::Clearing       => Resources { wood: 1, ..Resources::zero() },
+            ActionSpace::Sustenance     => Resources { food: 1, ..Resources::zero() },
         }
     }
+    fn place_tile(self) -> Option<TileToPlace> {
+        match self {
+            ActionSpace::Clearing   => Some(TileToPlace::Twin((Tile::Meadow, Tile::Field))),
+            ActionSpace::Sustenance => Some(TileToPlace::Twin((Tile::Meadow, Tile::Field))),
+            _ => None,
+        }
+    }
+}
+
+const BOARD_WIDTH: usize = 6;
+const BOARD_HEIGHT: usize = 4;
+
+fn adjacents(x: usize, y: usize) -> impl Iterator<Item = (usize, usize)> {
+    [(x.wrapping_sub(1), y), (x + 1, y), (x, y.wrapping_sub(1)), (x, y + 1)]
+        .into_iter()
+        .filter(|&(nx, ny)| nx < BOARD_WIDTH && ny < BOARD_HEIGHT)
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Tile {
+    // Outdoor
+    Forest,
+    Meadow,
+    Field,
+    // Indoor
+    Mountain,
+    Cavern,
+    Dwelling,
+}
+
+enum TileToPlace {
+    Single(Tile),
+    Twin((Tile, Tile)),
 }
 
 #[derive(Clone)]
@@ -96,19 +137,80 @@ impl Animals {
 #[derive(Clone)]
 pub struct Player {
     pub dwarfs: Vec<Dwarf>,
-
+    tiles: [[Tile; BOARD_WIDTH]; BOARD_HEIGHT],
     resources: Resources,
     animals: Animals,
 }
 impl Player {
     fn new(food: usize) -> Self {
-        let mut player = Player{
+        let mut tiles = [[Tile::Mountain; BOARD_WIDTH]; BOARD_HEIGHT];
+        for row in tiles.iter_mut() {
+            for x in 0..3 {
+                row[x] = Tile::Forest;
+            }
+        }
+        tiles[3][3] = Tile::Dwelling;
+        tiles[2][3] = Tile::Cavern;
+        let mut player = Player {
             dwarfs: vec![Dwarf { weapon: 0, placed_on: None }, Dwarf { weapon: 0, placed_on: None }],
+            tiles,
             resources: Resources::zero(),
             animals: Animals::zero(),
         };
         player.resources.food = food;
         player
+    }
+
+    fn adjacent_to_placed(&self, x: usize, y: usize) -> bool {
+        adjacents(x, y).any(|(nx, ny)| matches!(self.tiles[ny][nx], Tile::Meadow | Tile::Field))
+    }
+
+    fn tile_placements(&self, tile: TileToPlace) -> Vec<[[Tile; BOARD_WIDTH]; BOARD_HEIGHT]> {
+        let has_placed = self.tiles.iter().flatten()
+            .any(|&t| matches!(t, Tile::Meadow | Tile::Field));
+        let mut result = vec![];
+        match tile {
+            TileToPlace::Single(t) => {
+                for y in 0..BOARD_HEIGHT {
+                    for x in 0..BOARD_WIDTH {
+                        if self.tiles[y][x] != Tile::Forest { continue; }
+                        let valid = if !has_placed { x == 2 && y == 3 }
+                                    else { self.adjacent_to_placed(x, y) };
+                        if valid {
+                            let mut board = self.tiles;
+                            board[y][x] = t;
+                            result.push(board);
+                        }
+                    }
+                }
+            }
+            TileToPlace::Twin((t1, t2)) => {
+                for y in 0..BOARD_HEIGHT {
+                    for x in 0..BOARD_WIDTH {
+                        for (x2, y2) in [(x + 1, y), (x, y + 1)] {
+                            if x2 >= BOARD_WIDTH || y2 >= BOARD_HEIGHT { continue; }
+                            if self.tiles[y][x] != Tile::Forest || self.tiles[y2][x2] != Tile::Forest { continue; }
+                            let valid = if !has_placed {
+                                (x == 2 && y == 3) || (x2 == 2 && y2 == 3)
+                            } else {
+                                self.adjacent_to_placed(x, y) || self.adjacent_to_placed(x2, y2)
+                            };
+                            if valid {
+                                let mut board = self.tiles;
+                                board[y][x] = t1; board[y2][x2] = t2;
+                                result.push(board);
+                                if t1 != t2 {
+                                    let mut board = self.tiles;
+                                    board[y][x] = t2; board[y2][x2] = t1;
+                                    result.push(board);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        result
     }
     pub fn points(&self) -> i32 {
         self.dwarfs.len() as i32 +
@@ -248,7 +350,20 @@ impl GameState for State {
                 .placed_on = Some(space);
             child.players[current].resources += child.accumulated[space as usize];
             child.accumulated[space as usize] = Resources::zero();
-            children.push(child);
+            if let Some(tile) = space.place_tile() {
+                let boards = child.players[current].tile_placements(tile);
+                if boards.is_empty() {
+                    children.push(child);
+                } else {
+                    for board in boards {
+                        let mut c = child.clone();
+                        c.players[current].tiles = board;
+                        children.push(c);
+                    }
+                }
+            } else {
+                children.push(child);
+            }
         }
         children
     }
