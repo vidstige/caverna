@@ -110,17 +110,27 @@ impl Player {
         player.resources.food = food;
         player
     }
-    pub fn points(&self) -> usize {
-        self.dwarfs.len() +
-        self.resources.points +
-        self.resources.rubies + 
-        self.resources.wheat / 2 + 
-        self.resources.vegetables +
-        self.animals.dogs + 
-        self.animals.sheep + 
-        self.animals.boars + 
-        self.animals.donkeys +
-        self.animals.cows
+    pub fn points(&self) -> i32 {
+        self.dwarfs.len() as i32 +
+        self.resources.points as i32 +
+        self.resources.rubies as i32 +
+        self.resources.wheat as i32 / 2 +
+        self.resources.vegetables as i32 +
+        self.animals.dogs as i32 +
+        self.animals.sheep as i32 +
+        self.animals.boars as i32 +
+        self.animals.donkeys as i32 +
+        self.animals.cows as i32 -
+        self.resources.begging as i32 * 3
+    }
+    fn feed(&mut self) {
+        let needed = self.dwarfs.len();
+        if self.resources.food >= needed {
+            self.resources.food -= needed;
+        } else {
+            self.resources.begging += needed - self.resources.food;
+            self.resources.food = 0;
+        }
     }
 }
 
@@ -157,6 +167,11 @@ impl State {
             for dwarf in &mut player.dwarfs {
                 dwarf.placed_on = None;
             }
+        }
+    }
+    fn feeding(&mut self) {
+        for player in &mut self.players {
+            player.feed();
         }
     }
     fn replenish(&mut self) {
@@ -212,6 +227,7 @@ impl GameState for State {
         if all_placed {
             let mut next = self.clone();
             next.return_dwarfs();
+            next.feeding();
             next.round += 1;
             next.replenish();
             return vec![next];
