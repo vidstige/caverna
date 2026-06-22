@@ -1,14 +1,21 @@
 use crate::mcts::GameState;
 
 #[derive(Clone, Copy, PartialEq)]
+#[repr(usize)]
 pub enum ActionSpace {
-    Logging,
-    WoodGathering,
-    Supplies,
-    StartingPlayer,
+    Logging = 0,
+    WoodGathering = 1,
+    Supplies = 2,
+    StartingPlayer = 3,
 }
 impl ActionSpace {
     const COUNT: usize = 4;
+    const ALL: [ActionSpace; Self::COUNT] = [
+        ActionSpace::Logging,
+        ActionSpace::WoodGathering,
+        ActionSpace::Supplies,
+        ActionSpace::StartingPlayer,
+    ];
 
     fn initial(self) -> Resources {
         match self {
@@ -130,7 +137,11 @@ impl State {
         for _ in 0..count {
             players.push(Player::new(2));
         }
-        State { players, round: 0, starting_player: 0, accumulated: [Resources::zero(); ActionSpace::COUNT] }
+        let mut accumulated = [Resources::zero(); ActionSpace::COUNT];
+        for &space in &ActionSpace::ALL {
+            accumulated[space as usize] = space.initial();
+        }
+        State { players, round: 0, starting_player: 0, accumulated }
     }
     fn rounds(&self) -> u32 {
         match self.players.len() {
@@ -140,6 +151,23 @@ impl State {
     }
     fn done(&self) -> bool {
         self.round >= self.rounds()
+    }
+    fn return_dwarfs(&mut self) {
+        for player in &mut self.players {
+            for dwarf in &mut player.dwarfs {
+                dwarf.placed_on = None;
+            }
+        }
+    }
+    fn replenish(&mut self) {
+        for &space in &ActionSpace::ALL {
+            let slot = &mut self.accumulated[space as usize];
+            if slot.is_zero() {
+                *slot += space.initial();
+            } else {
+                *slot += space.per_round();
+            }
+        }
     }
 }
 
@@ -156,7 +184,8 @@ impl GameState for State {
         // Each step advances past a player who still has dwarves to place.
         let mut turns = 0;
         let mut seat = self.starting_player as usize;
-        for _ in 0..=(total_dwarves.iter().sum::<usize>()) {
+        let max_iter = total_dwarves.iter().sum::<usize>() * n + 1;
+        for _ in 0..max_iter {
             if placed[seat] < total_dwarves[seat] {
                 if turns == total_placed {
                     return seat;
@@ -165,15 +194,47 @@ impl GameState for State {
             }
             seat = (seat + 1) % n;
         }
-        panic!("current_player called when all dwarves are placed");
+        self.starting_player as usize
     }
 
     fn num_players(&self) -> usize {
-        2
+        self.players.len()
     }
 
-    fn children<R: rand::prelude::Rng>(&self, rng: &mut R) -> Vec<Self> {
-        todo!()
+    fn children<R: rand::prelude::Rng>(&self, _rng: &mut R) -> Vec<Self> {
+        if self.done() {
+            return vec![];
+        }
+
+        let all_placed = self.players.iter()
+            .all(|p| p.dwarfs.iter().all(|d| d.placed_on.is_some()));
+
+        if all_placed {
+            let mut next = self.clone();
+            next.return_dwarfs();
+            next.round += 1;
+            next.replenish();
+            return vec![next];
+        }
+
+        let current = self.current_player();
+        let mut children = vec![];
+        for &space in &ActionSpace::ALL {
+            let occupied = self.players.iter()
+                .any(|p| p.dwarfs.iter().any(|d| d.placed_on == Some(space)));
+            if occupied {
+                continue;
+            }
+            let mut child = self.clone();
+            child.players[current].dwarfs.iter_mut()
+                .find(|d| d.placed_on.is_none())
+                .expect("current player has no unplaced dwarf")
+                .placed_on = Some(space);
+            child.players[current].resources += child.accumulated[space as usize];
+            child.accumulated[space as usize] = Resources::zero();
+            children.push(child);
+        }
+        children
     }
 
     fn winner(&self) -> Option<usize> {
