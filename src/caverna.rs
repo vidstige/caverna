@@ -293,11 +293,6 @@ impl State {
             }
         }
     }
-    fn feeding(&mut self) {
-        for player in &mut self.players {
-            player.feed();
-        }
-    }
     fn replenish(&mut self) {
         for &space in &ActionSpace::ALL {
             let slot = &mut self.accumulated[space as usize];
@@ -311,6 +306,7 @@ impl State {
     fn harvest(&mut self) {
         for player in &mut self.players {
             player.harvest();
+            player.feed();
         }
     }
     fn sow_options(&self, player_idx: usize) -> Vec<Self> {
@@ -434,7 +430,6 @@ impl GameState for State {
                 for c in &mut candidates {
                     c.return_dwarfs();
                     c.harvest();
-                    c.feeding();
                     c.round += 1;
                     c.replenish();
                 }
