@@ -50,23 +50,32 @@ impl Resources {
 }
 
 #[derive(Clone)]
-pub struct Player {
-    dwarfs: Vec<u8>,  // weapon level
-
-    resources: Resources,
-
+struct Animals {
     dogs: usize,
     sheep: usize,
     boars: usize,
     donkeys: usize,
     cows: usize,
 }
+impl Animals {
+    fn zero() -> Animals {
+        Animals { dogs: 0, sheep: 0, boars: 0, donkeys: 0, cows: 0, }
+    }
+}
+
+#[derive(Clone)]
+pub struct Player {
+    dwarfs: Vec<u8>,  // weapon level
+
+    resources: Resources,
+    animals: Animals,
+}
 impl Player {
     fn new(food: usize) -> Self {
         let mut player = Player{
             dwarfs: vec![0, 0],
             resources: Resources::zero(),
-            dogs: 0, sheep: 0, boars: 0, donkeys: 0, cows: 0,
+            animals: Animals::zero(),
         };
         player.resources.food = food;
         player
@@ -77,11 +86,11 @@ impl Player {
         self.resources.rubies + 
         self.resources.wheat / 2 + 
         self.resources.vegetables +
-        self.dogs + 
-        self.sheep + 
-        self.boars + 
-        self.donkeys +
-        self.cows
+        self.animals.dogs + 
+        self.animals.sheep + 
+        self.animals.boars + 
+        self.animals.donkeys +
+        self.animals.cows
     }
 }
 
