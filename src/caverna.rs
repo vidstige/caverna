@@ -1,22 +1,17 @@
 use crate::mcts::GameState;
 
-// States
-enum Terrain {
-    Forest,
-    Meadow,
-    Soil,
+#[derive(Clone, Copy, PartialEq)]
+pub enum ActionSpace {
+    Logging,
+    WoodGathering,
+    Supplies,
+    StartingPlayer,
 }
 
-struct OutdoorTile {
-    terrain: Terrain,
-    fence: bool,
-    house: bool,
-}
-
-enum Cave { Mountain, Mine, Excavated }
-
-struct CaveTile {
-    cave: Cave,
+#[derive(Clone)]
+pub struct Dwarf {
+    pub weapon: u8,
+    pub placed_on: Option<ActionSpace>,
 }
 
 #[derive(Clone)]
@@ -65,7 +60,7 @@ impl Animals {
 
 #[derive(Clone)]
 pub struct Player {
-    dwarfs: Vec<u8>,  // weapon level
+    pub dwarfs: Vec<Dwarf>,
 
     resources: Resources,
     animals: Animals,
@@ -73,7 +68,7 @@ pub struct Player {
 impl Player {
     fn new(food: usize) -> Self {
         let mut player = Player{
-            dwarfs: vec![0, 0],
+            dwarfs: vec![Dwarf { weapon: 0, placed_on: None }, Dwarf { weapon: 0, placed_on: None }],
             resources: Resources::zero(),
             animals: Animals::zero(),
         };
@@ -96,9 +91,9 @@ impl Player {
 
 #[derive(Clone)]
 pub struct State {
-    round: u32,
-    turn: u32,
     pub players: Vec<Player>,
+    pub round: u32,
+    pub starting_player: u8,
 }
 impl State {
     pub fn new(count: u32) -> Self {
@@ -106,7 +101,7 @@ impl State {
         for _ in 0..count {
             players.push(Player::new(2));
         }
-        State{round: 0, turn: 0, players: players}
+        State { players, round: 0, starting_player: 0 }
     }
     fn rounds(self) -> u32 {
         // for two players
