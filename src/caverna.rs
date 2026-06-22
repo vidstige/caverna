@@ -23,26 +23,19 @@ impl ActionSpace {
         ActionSpace::SlashAndBurn,
     ];
 
-    fn initial(self) -> Resources {
+    fn gain_resources(self, rounds: u32, resources: &mut Resources) {
+        let r = rounds as usize;
         match self {
-            ActionSpace::Logging        => Resources { wood: 3, ..Resources::zero() },
-            ActionSpace::WoodGathering  => Resources { wood: 1, ..Resources::zero() },
-            ActionSpace::Supplies       => Resources { wood: 1, stone: 1, coal: 1, food: 1, points: 2, ..Resources::zero() },
-            ActionSpace::StartingPlayer => Resources { coal: 2, ..Resources::zero() },
-            ActionSpace::Clearing       => Resources { wood: 1, ..Resources::zero() },
-            ActionSpace::Sustenance     => Resources { wheat: 1, ..Resources::zero() },
-            ActionSpace::SlashAndBurn   => Resources::zero(),
-        }
-    }
-    fn per_round(self) -> Resources {
-        match self {
-            ActionSpace::Logging        => Resources { wood: 1, ..Resources::zero() },
-            ActionSpace::WoodGathering  => Resources { wood: 1, ..Resources::zero() },
-            ActionSpace::Supplies       => Resources::zero(),
-            ActionSpace::StartingPlayer => Resources { food: 1, ..Resources::zero() },
-            ActionSpace::Clearing       => Resources { wood: 1, ..Resources::zero() },
-            ActionSpace::Sustenance     => Resources { food: 1, ..Resources::zero() },
-            ActionSpace::SlashAndBurn   => Resources::zero(),
+            ActionSpace::Logging        => resources.wood += 3 + r,
+            ActionSpace::WoodGathering  => resources.wood += 1 + r,
+            ActionSpace::Supplies       => {
+                resources.wood += 1; resources.stone += 1; resources.coal += 1;
+                resources.food += 1; resources.points += 2;
+            }
+            ActionSpace::StartingPlayer => { resources.coal += 2; resources.food += r; }
+            ActionSpace::Clearing       => resources.wood += 1 + r,
+            ActionSpace::Sustenance     => { resources.wheat += 1; resources.food += r; }
+            ActionSpace::SlashAndBurn   => {}
         }
     }
     fn place_tile(self) -> Option<TileToPlace> {
@@ -105,11 +98,7 @@ impl Resources {
     fn zero() -> Resources {
         Resources { points: 0, begging: 0, wood: 0, stone: 0, coal: 0, rubies: 0, food: 0, wheat: 0, vegetables: 0 }
     }
-    fn is_zero(&self) -> bool {
-        self.points == 0 && self.begging == 0 && self.wood == 0 && self.stone == 0
-            && self.coal == 0 && self.rubies == 0 && self.food == 0
-            && self.wheat == 0 && self.vegetables == 0
-    }
+
 }
 impl std::ops::AddAssign for Resources {
     fn add_assign(&mut self, rhs: Resources) {
@@ -263,7 +252,7 @@ pub struct State {
     pub players: Vec<Player>,
     pub round: u32,
     pub starting_player: u8,
-    pub accumulated: [Resources; ActionSpace::COUNT],
+    pub accumulated: [u32; ActionSpace::COUNT],
 }
 impl State {
     pub fn new(count: u32) -> Self {
@@ -271,11 +260,7 @@ impl State {
         for _ in 0..count {
             players.push(Player::new(2));
         }
-        let mut accumulated = [Resources::zero(); ActionSpace::COUNT];
-        for &space in &ActionSpace::ALL {
-            accumulated[space as usize] = space.initial();
-        }
-        State { players, round: 0, starting_player: 0, accumulated }
+        State { players, round: 0, starting_player: 0, accumulated: [0u32; ActionSpace::COUNT] }
     }
     fn rounds(&self) -> u32 {
         match self.players.len() {
@@ -294,12 +279,13 @@ impl State {
         }
     }
     fn replenish(&mut self) {
-        for &space in &ActionSpace::ALL {
-            let slot = &mut self.accumulated[space as usize];
-            if slot.is_zero() {
-                *slot += space.initial();
+        for i in 0..ActionSpace::COUNT {
+            let taken = self.players.iter()
+                .any(|p| p.dwarfs.iter().any(|d| d.placed_on.map(|s| s as usize) == Some(i)));
+            if taken {
+                self.accumulated[i] = 0;
             } else {
-                *slot += space.per_round();
+                self.accumulated[i] += 1;
             }
         }
     }
@@ -400,8 +386,7 @@ impl GameState for State {
                 .find(|d| d.placed_on.is_none())
                 .expect("current player has no unplaced dwarf")
                 .placed_on = Some(space);
-            child.players[current].resources += child.accumulated[space as usize];
-            child.accumulated[space as usize] = Resources::zero();
+            space.gain_resources(child.accumulated[space as usize], &mut child.players[current].resources);
 
             let mut candidates = if let Some(tile) = space.place_tile() {
                 let boards = child.players[current].tile_placements(tile);
@@ -428,10 +413,10 @@ impl GameState for State {
                 .all(|p| p.dwarfs.iter().all(|d| d.placed_on.is_some()));
             if all_placed {
                 for c in &mut candidates {
+                    c.replenish();
                     c.return_dwarfs();
                     c.harvest();
                     c.round += 1;
-                    c.replenish();
                 }
             }
 
