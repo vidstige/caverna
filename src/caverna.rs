@@ -294,6 +294,78 @@ impl Player {
         [self.animals.sheep, self.animals.boars, self.animals.donkeys, self.animals.cows]
             .iter().filter(|&&n| n == 0).count() as i32
     }
+    fn trim_animals(&self, animals: Animals) -> Animals {
+        // Boars can live in forest stables (1 per stable)
+        let boar_fixed = self.tiles.iter().flatten()
+            .filter(|&&t| t == Tile::ForestStable)
+            .count();
+        // Sheep can live on unfenced meadows, guarded by dogs (dogs+1 total if any meadow exists)
+        let sheep_meadow = if self.tiles.iter().flatten().any(|&t| t == Tile::Meadow) {
+            animals.dogs + 1
+        } else {
+            0
+        };
+        // Flexible slots: each MeadowStable holds 1 farm animal; dwelling holds 2
+        let flex = self.tiles.iter().flatten()
+            .filter(|&&t| t == Tile::MeadowStable)
+            .count() + 2;
+
+        // Capacity per pasture: cells * 2, doubled for each stable in the pasture
+        let pasture_caps: Vec<usize> = self.pastures.iter().map(|p| {
+            let stables = p.cells.iter()
+                .filter(|&&(x, y)| self.tiles[y][x] == Tile::PastureStable)
+                .count();
+            p.cells.len() * 2 * (1 << stables)
+        }).collect();
+
+        let fixed_boar  = animals.boars.min(boar_fixed);
+        let fixed_sheep = animals.sheep.min(sheep_meadow);
+        // Remaining to assign to pastures/flex, in priority order: cattle, boar, donkey, sheep
+        let need = [
+            animals.cows,
+            animals.boars - fixed_boar,
+            animals.donkeys,
+            animals.sheep - fixed_sheep,
+        ];
+
+        // Try all type assignments per pasture (4^n, typically ≤256)
+        let n = pasture_caps.len();
+        let mut best = [0usize; 4];
+        let mut best_score = 0usize;
+        for combo in 0..4_usize.pow(n as u32) {
+            let mut remaining = need;
+            let mut kept = [0usize; 4];
+            let mut code = combo;
+            for &cap in &pasture_caps {
+                let t = code % 4;
+                code /= 4;
+                let took = remaining[t].min(cap);
+                kept[t] += took;
+                remaining[t] -= took;
+            }
+            // Fill flex slots greedily in priority order
+            let mut flex_left = flex;
+            for t in 0..4 {
+                let took = remaining[t].min(flex_left);
+                kept[t] += took;
+                flex_left -= took;
+            }
+            let score: usize = kept.iter().sum();
+            if score > best_score {
+                best_score = score;
+                best = kept;
+            }
+        }
+
+        Animals {
+            dogs:    animals.dogs,
+            cows:    best[0],
+            boars:   fixed_boar  + best[1],
+            donkeys: best[2],
+            sheep:   fixed_sheep + best[3],
+        }
+    }
+
     fn stable_count(&self) -> usize {
         self.tiles.iter().flatten()
             .filter(|&&t| matches!(t, Tile::ForestStable | Tile::MeadowStable | Tile::PastureStable))
