@@ -53,8 +53,8 @@ impl ActionSpace {
     fn gain_animals(self, accumulated: u32, animals: &mut Animals) {
         let r = accumulated as usize;
         match self {
-            ActionSpace::SheepFarming  => animals.sheep += 1 + r,
-            ActionSpace::DonkeyFarming => animals.donkeys += 1 + r,
+            ActionSpace::SheepFarming  => animals[AnimalType::Sheep  as usize] += 1 + r,
+            ActionSpace::DonkeyFarming => animals[AnimalType::Donkey as usize] += 1 + r,
             _ => {}
         }
     }
@@ -172,22 +172,11 @@ impl std::ops::AddAssign for Resources {
     }
 }
 
-#[derive(Clone)]
-struct Animals {
-    dogs: usize,
-    sheep: usize,
-    boars: usize,
-    donkeys: usize,
-    cows: usize,
-}
-impl Animals {
-    fn zero() -> Animals {
-        Animals { dogs: 0, sheep: 0, boars: 0, donkeys: 0, cows: 0, }
-    }
-}
-
 #[derive(Clone, Copy, PartialEq)]
-enum AnimalType { Sheep, Boar, Donkey, Cow }
+#[repr(usize)]
+enum AnimalType { Cow = 0, Boar = 1, Donkey = 2, Sheep = 3 }
+
+type Animals = [usize; 4];
 
 #[derive(Clone)]
 struct Pasture {
@@ -200,7 +189,8 @@ pub struct Player {
     pub dwarfs: Vec<Dwarf>,
     tiles: [[Tile; BOARD_WIDTH]; BOARD_HEIGHT],
     resources: Resources,
-    animals: Animals,
+    dogs: usize,
+    animals: Animals, // indexed by AnimalType
     pastures: Vec<Pasture>,
 }
 impl Player {
@@ -217,7 +207,8 @@ impl Player {
             dwarfs: vec![Dwarf { weapon: 0, placed_on: None }, Dwarf { weapon: 0, placed_on: None }],
             tiles,
             resources: Resources::zero(),
-            animals: Animals::zero(),
+            dogs: 0,
+            animals: [0; 4],
             pastures: vec![],
         };
         player.resources.food = food;
@@ -284,15 +275,11 @@ impl Player {
         self.resources.rubies as i32 +
         self.resources.wheat as i32 / 2 +
         self.resources.vegetables as i32 +
-        self.animals.dogs as i32 +
-        self.animals.sheep as i32 +
-        self.animals.boars as i32 +
-        self.animals.donkeys as i32 +
-        self.animals.cows as i32 -
+        self.dogs as i32 +
+        self.animals.iter().sum::<usize>() as i32 -
         self.resources.begging as i32 * 3 -
         self.tiles.iter().flatten().filter(|&&t| t.is_undeveloped()).count() as i32 -
-        [self.animals.sheep, self.animals.boars, self.animals.donkeys, self.animals.cows]
-            .iter().filter(|&&n| n == 0).count() as i32
+        self.animals.iter().filter(|&&n| n == 0).count() as i32
     }
     fn trim_animals(&self, animals: Animals) -> Animals {
         // Boars can live in forest stables (1 per stable)
@@ -301,7 +288,7 @@ impl Player {
             .count();
         // Sheep can live on unfenced meadows, guarded by dogs (dogs+1 total if any meadow exists)
         let sheep_meadow = if self.tiles.iter().flatten().any(|&t| t == Tile::Meadow) {
-            animals.dogs + 1
+            self.dogs + 1
         } else {
             0
         };
@@ -318,14 +305,14 @@ impl Player {
             p.cells.len() * 2 * (1 << stables)
         }).collect();
 
-        let fixed_boar  = animals.boars.min(boar_fixed);
-        let fixed_sheep = animals.sheep.min(sheep_meadow);
+        let fixed_boar  = animals[AnimalType::Boar  as usize].min(boar_fixed);
+        let fixed_sheep = animals[AnimalType::Sheep as usize].min(sheep_meadow);
         // Remaining to assign to pastures/flex, in priority order: cattle, boar, donkey, sheep
         let need = [
-            animals.cows,
-            animals.boars - fixed_boar,
-            animals.donkeys,
-            animals.sheep - fixed_sheep,
+            animals[AnimalType::Cow    as usize],
+            animals[AnimalType::Boar   as usize] - fixed_boar,
+            animals[AnimalType::Donkey as usize],
+            animals[AnimalType::Sheep  as usize] - fixed_sheep,
         ];
 
         // Try all type assignments per pasture (4^n, typically ≤256)
@@ -357,13 +344,7 @@ impl Player {
             }
         }
 
-        Animals {
-            dogs:    animals.dogs,
-            cows:    best[0],
-            boars:   fixed_boar  + best[1],
-            donkeys: best[2],
-            sheep:   fixed_sheep + best[3],
-        }
+        [best[AnimalType::Cow as usize], fixed_boar + best[AnimalType::Boar as usize], best[AnimalType::Donkey as usize], fixed_sheep + best[AnimalType::Sheep as usize]]
     }
 
     fn stable_count(&self) -> usize {
@@ -400,13 +381,7 @@ impl Player {
     }
 
     fn breed(&mut self) {
-        let bred = Animals {
-            dogs:    self.animals.dogs,
-            sheep:   self.animals.sheep   + if self.animals.sheep   >= 2 { 1 } else { 0 },
-            boars:   self.animals.boars   + if self.animals.boars   >= 2 { 1 } else { 0 },
-            donkeys: self.animals.donkeys + if self.animals.donkeys >= 2 { 1 } else { 0 },
-            cows:    self.animals.cows    + if self.animals.cows    >= 2 { 1 } else { 0 },
-        };
+        let bred = self.animals.map(|n| n + if n >= 2 { 1 } else { 0 });
         self.animals = self.trim_animals(bred);
     }
 
