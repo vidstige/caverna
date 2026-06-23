@@ -237,7 +237,8 @@ impl Player {
         self.animals.boars as i32 +
         self.animals.donkeys as i32 +
         self.animals.cows as i32 -
-        self.resources.begging as i32 * 3
+        self.resources.begging as i32 * 3 -
+        self.tiles.iter().flatten().filter(|&&t| t == t.base()).count() as i32
     }
     fn feed(&mut self) {
         let needed = self.dwarfs.len();
