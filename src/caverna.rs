@@ -12,9 +12,11 @@ pub enum ActionSpace {
     SlashAndBurn = 6,
     DriftMining = 7,
     Excavation = 8,
+    SheepFarming = 9,
+    DonkeyFarming = 10,
 }
 impl ActionSpace {
-    const COUNT: usize = 9;
+    const COUNT: usize = 11;
     const ALL: [ActionSpace; Self::COUNT] = [
         ActionSpace::Logging,
         ActionSpace::WoodGathering,
@@ -25,6 +27,8 @@ impl ActionSpace {
         ActionSpace::SlashAndBurn,
         ActionSpace::DriftMining,
         ActionSpace::Excavation,
+        ActionSpace::SheepFarming,
+        ActionSpace::DonkeyFarming,
     ];
 
     fn gain_resources(self, rounds: u32, resources: &mut Resources) {
@@ -42,6 +46,16 @@ impl ActionSpace {
             ActionSpace::SlashAndBurn   => {}
             ActionSpace::DriftMining    => resources.stone += 1 + r,
             ActionSpace::Excavation     => resources.stone += 1 + r,
+            ActionSpace::SheepFarming   => {}
+            ActionSpace::DonkeyFarming  => {}
+        }
+    }
+    fn gain_animals(self, accumulated: u32, animals: &mut Animals) {
+        let r = accumulated as usize;
+        match self {
+            ActionSpace::SheepFarming  => animals.sheep += 1 + r,
+            ActionSpace::DonkeyFarming => animals.donkeys += 1 + r,
+            _ => {}
         }
     }
     fn place_tile(self) -> Vec<TileToPlace> {
@@ -52,6 +66,7 @@ impl ActionSpace {
                 vec![TileToPlace::Twin((Tile::Tunnel, Tile::Cave))],
             ActionSpace::Excavation =>
                 vec![TileToPlace::Twin((Tile::Tunnel, Tile::Cave)), TileToPlace::Twin((Tile::Cave, Tile::Cave))],
+            ActionSpace::SheepFarming | ActionSpace::DonkeyFarming => vec![],
             _ => vec![],
         }
     }
@@ -96,6 +111,19 @@ impl Tile {
 
     fn is_undeveloped(self) -> bool {
         self == self.base()
+    }
+
+    fn is_fenceable(self) -> bool {
+        matches!(self, Tile::Meadow | Tile::MeadowStable)
+    }
+
+    fn maybe_add_stable(self) -> Option<Tile> {
+        match self {
+            Tile::Forest  => Some(Tile::ForestStable),
+            Tile::Meadow  => Some(Tile::MeadowStable),
+            Tile::Pasture => Some(Tile::PastureStable),
+            _ => None,
+        }
     }
 }
 
@@ -266,6 +294,12 @@ impl Player {
         [self.animals.sheep, self.animals.boars, self.animals.donkeys, self.animals.cows]
             .iter().filter(|&&n| n == 0).count() as i32
     }
+    fn stable_count(&self) -> usize {
+        self.tiles.iter().flatten()
+            .filter(|&&t| matches!(t, Tile::ForestStable | Tile::MeadowStable | Tile::PastureStable))
+            .count()
+    }
+
     fn feed(&mut self) {
         let needed = self.dwarfs.len();
         if self.resources.food >= needed {
@@ -371,6 +405,74 @@ impl State {
             player.feed();
         }
     }
+    fn pasture_options(&self, player_idx: usize) -> Vec<Self> {
+        let player = &self.players[player_idx];
+        let mut results = vec![self.clone()];
+
+        let fence = |t: Tile| match t {
+            Tile::Meadow       => Tile::Pasture,
+            Tile::MeadowStable => Tile::PastureStable,
+            _ => unreachable!(),
+        };
+
+        let meadows: Vec<(usize, usize)> = (0..BOARD_HEIGHT)
+            .flat_map(|y| (0..BOARD_WIDTH).map(move |x| (x, y)))
+            .filter(|&(x, y)| player.tiles[y][x].is_fenceable())
+            .collect();
+
+        if player.resources.wood >= 2 {
+            for &(x, y) in &meadows {
+                let mut child = self.clone();
+                child.players[player_idx].tiles[y][x] = fence(player.tiles[y][x]);
+                child.players[player_idx].resources.wood -= 2;
+                child.players[player_idx].pastures.push(Pasture { cells: vec![(x, y)], animals: None });
+                results.push(child);
+            }
+        }
+
+        if player.resources.wood >= 4 {
+            for &(x, y) in &meadows {
+                for (x2, y2) in [(x + 1, y), (x, y + 1)] {
+                    if x2 >= BOARD_WIDTH || y2 >= BOARD_HEIGHT { continue; }
+                    if !player.tiles[y2][x2].is_fenceable() { continue; }
+                    let mut child = self.clone();
+                    child.players[player_idx].tiles[y][x] = fence(player.tiles[y][x]);
+                    child.players[player_idx].tiles[y2][x2] = fence(player.tiles[y2][x2]);
+                    child.players[player_idx].resources.wood -= 4;
+                    child.players[player_idx].pastures.push(Pasture {
+                        cells: vec![(x, y), (x2, y2)],
+                        animals: None,
+                    });
+                    results.push(child);
+                }
+            }
+        }
+
+        results
+    }
+
+    fn stable_options(&self, player_idx: usize) -> Vec<Self> {
+        let player = &self.players[player_idx];
+        let mut results = vec![self.clone()];
+
+        if player.resources.stone < 1 || player.stable_count() >= 3 {
+            return results;
+        }
+
+        for y in 0..BOARD_HEIGHT {
+            for x in 0..BOARD_WIDTH {
+                if let Some(t) = player.tiles[y][x].maybe_add_stable() {
+                    let mut child = self.clone();
+                    child.players[player_idx].tiles[y][x] = t;
+                    child.players[player_idx].resources.stone -= 1;
+                    results.push(child);
+                }
+            }
+        }
+
+        results
+    }
+
     fn sow_options(&self, player_idx: usize) -> Vec<Self> {
         let player = &self.players[player_idx];
         let empty: Vec<(usize, usize)> = (0..BOARD_HEIGHT)
@@ -463,6 +565,7 @@ impl GameState for State {
                 .expect("current player has no unplaced dwarf")
                 .placed_on = Some(space);
             space.gain_resources(child.accumulated[space as usize], &mut child.players[current].resources);
+            space.gain_animals(child.accumulated[space as usize], &mut child.players[current].animals);
 
             let tile_choices = space.place_tile();
             let mut candidates = if tile_choices.is_empty() {
@@ -485,6 +588,12 @@ impl GameState for State {
             if space == ActionSpace::SlashAndBurn {
                 candidates = candidates.into_iter()
                     .flat_map(|c| c.sow_options(current))
+                    .collect();
+            }
+            if matches!(space, ActionSpace::SheepFarming | ActionSpace::DonkeyFarming) {
+                candidates = candidates.into_iter()
+                    .flat_map(|c| c.pasture_options(current))
+                    .flat_map(|c| c.stable_options(current))
                     .collect();
             }
 
