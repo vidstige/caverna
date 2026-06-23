@@ -399,6 +399,17 @@ impl Player {
         }
     }
 
+    fn breed(&mut self) {
+        let bred = Animals {
+            dogs:    self.animals.dogs,
+            sheep:   self.animals.sheep   + if self.animals.sheep   >= 2 { 1 } else { 0 },
+            boars:   self.animals.boars   + if self.animals.boars   >= 2 { 1 } else { 0 },
+            donkeys: self.animals.donkeys + if self.animals.donkeys >= 2 { 1 } else { 0 },
+            cows:    self.animals.cows    + if self.animals.cows    >= 2 { 1 } else { 0 },
+        };
+        self.animals = self.trim_animals(bred);
+    }
+
     fn verify_pastures(&self) {
         let mut seen: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
         for (i, pasture) in self.pastures.iter().enumerate() {
@@ -475,6 +486,7 @@ impl State {
         for player in &mut self.players {
             player.harvest();
             player.feed();
+            player.breed();
         }
     }
     fn pasture_options(&self, player_idx: usize) -> Vec<Self> {
