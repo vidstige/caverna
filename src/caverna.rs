@@ -14,9 +14,10 @@ pub enum ActionSpace {
     Excavation = 8,
     SheepFarming = 9,
     DonkeyFarming = 10,
+    OreMineConstruction = 11,
 }
 impl ActionSpace {
-    const COUNT: usize = 11;
+    const COUNT: usize = 12;
     const ALL: [ActionSpace; Self::COUNT] = [
         ActionSpace::Logging,
         ActionSpace::WoodGathering,
@@ -29,6 +30,7 @@ impl ActionSpace {
         ActionSpace::Excavation,
         ActionSpace::SheepFarming,
         ActionSpace::DonkeyFarming,
+        ActionSpace::OreMineConstruction,
     ];
 
     fn gain_resources(self, rounds: u32, resources: &mut Resources) {
@@ -46,8 +48,9 @@ impl ActionSpace {
             ActionSpace::SlashAndBurn   => {}
             ActionSpace::DriftMining    => resources.stone += 1 + r,
             ActionSpace::Excavation     => resources.stone += 1 + r,
-            ActionSpace::SheepFarming   => {}
-            ActionSpace::DonkeyFarming  => {}
+            ActionSpace::SheepFarming        => {}
+            ActionSpace::DonkeyFarming       => {}
+            ActionSpace::OreMineConstruction => {}
         }
     }
     fn gain_animals(self, accumulated: u32, animals: &mut Animals) {
@@ -66,6 +69,8 @@ impl ActionSpace {
                 vec![TileToPlace::Twin((Tile::Tunnel, Tile::Cave))],
             ActionSpace::Excavation =>
                 vec![TileToPlace::Twin((Tile::Tunnel, Tile::Cave)), TileToPlace::Twin((Tile::Cave, Tile::Cave))],
+            ActionSpace::OreMineConstruction =>
+                vec![TileToPlace::Twin((Tile::Tunnel, Tile::OreMine))],
             ActionSpace::SheepFarming | ActionSpace::DonkeyFarming => vec![],
             _ => vec![],
         }
@@ -94,6 +99,7 @@ enum Tile {
     // Indoor
     Mountain,
     Tunnel,
+    OreMine,
     Cave,
     Dwelling,
 }
@@ -104,7 +110,7 @@ impl Tile {
             Tile::Meadow | Tile::MeadowStable
             | Tile::Pasture | Tile::PastureStable
             | Tile::Field(_) => Tile::Forest,
-            Tile::Tunnel | Tile::Cave | Tile::Dwelling => Tile::Mountain,
+            Tile::Tunnel | Tile::OreMine | Tile::Cave | Tile::Dwelling => Tile::Mountain,
             Tile::Forest | Tile::ForestStable | Tile::Mountain => self,
         }
     }
@@ -649,6 +655,7 @@ impl GameState for State {
                     .flat_map(|c| c.sow_options(current))
                     .collect();
             }
+
             if matches!(space, ActionSpace::SheepFarming | ActionSpace::DonkeyFarming) {
                 candidates = candidates.into_iter()
                     .flat_map(|c| c.pasture_options(current))
