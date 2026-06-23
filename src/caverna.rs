@@ -70,8 +70,12 @@ fn adjacents(x: usize, y: usize) -> impl Iterator<Item = (usize, usize)> {
 enum Tile {
     // Outdoor
     Forest,
-    Meadow,
-    Field((u8, u8)), // (wheat, vegetables) — only one non-zero at a time
+    ForestStable,                     // stable on uncleared forest — 1 boar
+    Meadow,                           // unfenced
+    MeadowStable,                     // unfenced + stable — 1 animal of any type
+    Pasture,                          // fenced — 2 animals/cell
+    PastureStable,                    // fenced + stable — doubles capacity
+    Field((u8, u8)),                  // (wheat, vegetables) — only one non-zero at a time
     // Indoor
     Mountain,
     Tunnel,
@@ -82,10 +86,16 @@ enum Tile {
 impl Tile {
     fn base(self) -> Tile {
         match self {
-            Tile::Meadow | Tile::Field(_) => Tile::Forest,
+            Tile::Meadow | Tile::MeadowStable
+            | Tile::Pasture | Tile::PastureStable
+            | Tile::Field(_) => Tile::Forest,
             Tile::Tunnel | Tile::Cave | Tile::Dwelling => Tile::Mountain,
-            Tile::Forest | Tile::Mountain => self,
+            Tile::Forest | Tile::ForestStable | Tile::Mountain => self,
         }
+    }
+
+    fn is_undeveloped(self) -> bool {
+        self == self.base()
     }
 }
 
@@ -148,12 +158,22 @@ impl Animals {
     }
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum AnimalType { Sheep, Boar, Donkey, Cow }
+
+#[derive(Clone)]
+struct Pasture {
+    cells: Vec<(usize, usize)>,
+    animals: Option<(AnimalType, u8)>,
+}
+
 #[derive(Clone)]
 pub struct Player {
     pub dwarfs: Vec<Dwarf>,
     tiles: [[Tile; BOARD_WIDTH]; BOARD_HEIGHT],
     resources: Resources,
     animals: Animals,
+    pastures: Vec<Pasture>,
 }
 impl Player {
     fn new(food: usize) -> Self {
@@ -170,13 +190,17 @@ impl Player {
             tiles,
             resources: Resources::zero(),
             animals: Animals::zero(),
+            pastures: vec![],
         };
         player.resources.food = food;
         player
     }
 
     fn adjacent_to_developed(&self, x: usize, y: usize, base: Tile) -> bool {
-        adjacents(x, y).any(|(nx, ny)| self.tiles[ny][nx] != base)
+        adjacents(x, y).any(|(nx, ny)| {
+            let t = self.tiles[ny][nx];
+            !t.is_undeveloped() && t.base() == base
+        })
     }
 
     fn tile_placements(&self, tile: TileToPlace) -> Vec<[[Tile; BOARD_WIDTH]; BOARD_HEIGHT]> {
@@ -198,7 +222,7 @@ impl Player {
             TileToPlace::Twin((t1, t2)) => {
                 let base = t1.base();
                 let outdoor_first = base == Tile::Forest
-                    && !self.tiles.iter().flatten().any(|&t| matches!(t, Tile::Meadow | Tile::Field(_)));
+                    && self.tiles.iter().flatten().all(|t| t.is_undeveloped());
                 for y in 0..BOARD_HEIGHT {
                     for x in 0..BOARD_WIDTH {
                         for (x2, y2) in [(x + 1, y), (x, y + 1)] {
@@ -238,7 +262,7 @@ impl Player {
         self.animals.donkeys as i32 +
         self.animals.cows as i32 -
         self.resources.begging as i32 * 3 -
-        self.tiles.iter().flatten().filter(|&&t| t == t.base()).count() as i32 -
+        self.tiles.iter().flatten().filter(|&&t| t.is_undeveloped()).count() as i32 -
         [self.animals.sheep, self.animals.boars, self.animals.donkeys, self.animals.cows]
             .iter().filter(|&&n| n == 0).count() as i32
     }
@@ -266,6 +290,35 @@ impl Player {
                     _ => {}
                 }
             }
+        }
+    }
+
+    fn verify_pastures(&self) {
+        let mut seen: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
+        for (i, pasture) in self.pastures.iter().enumerate() {
+            assert!(!pasture.cells.is_empty(), "pasture {i} has no cells");
+
+            for &(x, y) in &pasture.cells {
+                assert!(
+                    matches!(self.tiles[y][x], Tile::Pasture | Tile::PastureStable),
+                    "pasture {i} cell ({x},{y}) is not a pasture tile"
+                );
+                assert!(seen.insert((x, y)), "cell ({x},{y}) appears in multiple pastures");
+            }
+
+            // All cells must form a single connected component
+            let cell_set: std::collections::HashSet<_> = pasture.cells.iter().copied().collect();
+            let mut visited: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
+            let mut stack = vec![pasture.cells[0]];
+            while let Some((x, y)) = stack.pop() {
+                if !visited.insert((x, y)) { continue; }
+                for (nx, ny) in adjacents(x, y) {
+                    if cell_set.contains(&(nx, ny)) {
+                        stack.push((nx, ny));
+                    }
+                }
+            }
+            assert_eq!(visited.len(), pasture.cells.len(), "pasture {i} cells are not all connected");
         }
     }
 }
