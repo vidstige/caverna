@@ -14,7 +14,7 @@ fn main() {
     let names = ["Samuel", "Maria"];
     //state.deal(&mut rng);
     while state.winner().is_none() {
-        println!("round {}", names[state.current_player()]);
+        println!("round {}: {}", state.round, names[state.current_player()]);
         if state.current_player() == 0 {
             state = search(&state, &mut rng, 1000).unwrap();
         } else {
