@@ -44,9 +44,9 @@ impl ActionSpace {
                 resources.wood += 1; resources.stone += 1; resources.coal += 1;
                 resources.food += 1; resources.points += 2;
             }
-            ActionSpace::StartingPlayer => { resources.coal += 2; resources.food += r; }
+            ActionSpace::StartingPlayer => { resources.coal += 2; resources.food += 1 + r; }
             ActionSpace::Clearing       => resources.wood += 1 + r,
-            ActionSpace::Sustenance     => { resources.wheat += 1; resources.food += r; }
+            ActionSpace::Sustenance     => { resources.wheat += 1; resources.food += 1 + r; }
             ActionSpace::SlashAndBurn   => {}
             ActionSpace::DriftMining    => resources.stone += 1 + r,
             ActionSpace::Excavation     => resources.stone += 1 + r,
