@@ -63,29 +63,29 @@ impl ActionSpace {
             _ => {}
         }
     }
-    fn gain_placement_resources(self, replaced: TileToPlace, resources: &mut Resources) {
+    fn gain_placement_resources(self, replaced: TileGroup, resources: &mut Resources) {
         match self {
             ActionSpace::OreMineConstruction => resources.coal += 3,
             ActionSpace::RubyMineConstruction => {
-                if matches!(replaced, TileToPlace::Single(Tile::OreTunnel)) {
+                if matches!(replaced, TileGroup::Single(Tile::OreTunnel)) {
                     resources.rubies += 1;
                 }
             }
             _ => {}
         }
     }
-    fn place_tile(self) -> Vec<TileToPlace> {
+    fn place_tile(self) -> Vec<TileGroup> {
         match self {
             ActionSpace::Clearing | ActionSpace::Sustenance | ActionSpace::SlashAndBurn =>
-                vec![TileToPlace::Twin((Tile::Meadow, Tile::Field((0, 0))))],
+                vec![TileGroup::Twin((Tile::Meadow, Tile::Field((0, 0))))],
             ActionSpace::DriftMining =>
-                vec![TileToPlace::Twin((Tile::Tunnel, Tile::Cave))],
+                vec![TileGroup::Twin((Tile::Tunnel, Tile::Cave))],
             ActionSpace::Excavation =>
-                vec![TileToPlace::Twin((Tile::Tunnel, Tile::Cave)), TileToPlace::Twin((Tile::Cave, Tile::Cave))],
+                vec![TileGroup::Twin((Tile::Tunnel, Tile::Cave)), TileGroup::Twin((Tile::Cave, Tile::Cave))],
             ActionSpace::OreMineConstruction =>
-                vec![TileToPlace::Twin((Tile::OreTunnel, Tile::OreMine))],
+                vec![TileGroup::Twin((Tile::OreTunnel, Tile::OreMine))],
             ActionSpace::RubyMineConstruction =>
-                vec![TileToPlace::Single(Tile::RubyMine)],
+                vec![TileGroup::Single(Tile::RubyMine)],
             ActionSpace::SheepFarming | ActionSpace::DonkeyFarming => vec![],
             _ => vec![],
         }
@@ -95,14 +95,14 @@ impl ActionSpace {
 const BOARD_WIDTH: usize = 6;
 const BOARD_HEIGHT: usize = 4;
 
-fn board_delta(old: &[[Tile; BOARD_WIDTH]; BOARD_HEIGHT], new: &[[Tile; BOARD_WIDTH]; BOARD_HEIGHT]) -> TileToPlace {
+fn board_delta(old: &[[Tile; BOARD_WIDTH]; BOARD_HEIGHT], new: &[[Tile; BOARD_WIDTH]; BOARD_HEIGHT]) -> TileGroup {
     let replaced: Vec<Tile> = old.iter().flatten()
         .zip(new.iter().flatten())
         .filter_map(|(&o, &n)| if o != n { Some(o) } else { None })
         .collect();
     match replaced.as_slice() {
-        &[t]      => TileToPlace::Single(t),
-        &[t1, t2] => TileToPlace::Twin((t1, t2)),
+        &[t]      => TileGroup::Single(t),
+        &[t1, t2] => TileGroup::Twin((t1, t2)),
         _         => panic!("unexpected board delta: {} tiles changed", replaced.len()),
     }
 }
@@ -162,7 +162,7 @@ impl Tile {
     }
 }
 
-enum TileToPlace {
+enum TileGroup {
     Single(Tile),
     Twin((Tile, Tile)),
 }
@@ -257,10 +257,10 @@ impl Player {
         })
     }
 
-    fn tile_placements(&self, tile: TileToPlace) -> Vec<[[Tile; BOARD_WIDTH]; BOARD_HEIGHT]> {
+    fn tile_placements(&self, tile: TileGroup) -> Vec<[[Tile; BOARD_WIDTH]; BOARD_HEIGHT]> {
         let mut result = vec![];
         match tile {
-            TileToPlace::Single(t) => {
+            TileGroup::Single(t) => {
                 let base = t.base();
                 for y in 0..BOARD_HEIGHT {
                     for x in 0..BOARD_WIDTH {
@@ -273,7 +273,7 @@ impl Player {
                     }
                 }
             }
-            TileToPlace::Twin((t1, t2)) => {
+            TileGroup::Twin((t1, t2)) => {
                 let base = t1.base();
                 let outdoor_first = base == Tile::Forest
                     && self.tiles.iter().flatten().all(|t| t.is_undeveloped());
