@@ -34,9 +34,15 @@ fn main() {
 
     let mut state = State::new(2);
     let names = ["Samuel", "Maria"];
-    //state.deal(&mut rng);
+    let mut round = u32::MAX;
     while state.winner().is_none() {
-        println!("round {}: {}", state.round, names[state.current_player()]);
+        if state.round != round {
+            round = state.round;
+            println!("=== Round {} ===", round + 1);
+        }
+        if state.is_placement() {
+            println!("{}", names[state.current_player()]);
+        }
         if state.current_player() == 0 {
             state = search(&state, &mut rng, mcts_iter).unwrap();
         } else {
