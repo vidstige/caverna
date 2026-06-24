@@ -496,7 +496,11 @@ impl Player {
 }
 
 #[derive(Clone, PartialEq)]
-enum Phase { Placement, Trading }
+enum Phase {
+    Placement,
+    Adventuring { space: ActionSpace, remaining: usize },
+    Trading,
+}
 
 #[derive(Clone)]
 pub struct State {
@@ -592,6 +596,13 @@ impl State {
                     self.current_player, derived
                 );
             }
+            Phase::Adventuring { space, remaining } => {
+                assert!(remaining >= 1, "Adventuring remaining must be >= 1");
+                assert!(
+                    self.players[self.current_player].dwarfs.iter().any(|d| d.placed_on == Some(space)),
+                    "current player has no dwarf on {:?} during Adventuring", space as usize
+                );
+            }
             Phase::Trading => {
                 assert!(
                     self.players.iter().all(|p| p.dwarfs.iter().all(|d| d.placed_on.is_some())),
@@ -672,6 +683,36 @@ impl State {
             }
         }
 
+        results
+    }
+
+    fn adventure_options(&self, player_idx: usize, weapon: u8) -> Vec<Self> {
+        if weapon == 0 {
+            return vec![self.clone()];
+        }
+        let mut results = vec![];
+        if weapon >= 1 {
+            let mut c = self.clone(); c.players[player_idx].resources.wood += 1; results.push(c);
+            let mut c = self.clone(); c.players[player_idx].dogs += 1; results.push(c);
+        }
+        if weapon >= 2 {
+            let mut c = self.clone(); c.players[player_idx].resources.wheat += 1; results.push(c);
+            let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Sheep as usize] += 1; results.push(c);
+        }
+        if weapon >= 3 {
+            let mut c = self.clone(); c.players[player_idx].resources.stone += 1; results.push(c);
+            let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Donkey as usize] += 1; results.push(c);
+        }
+        if weapon >= 4 {
+            let mut c = self.clone(); c.players[player_idx].resources.vegetables += 1; results.push(c);
+            let mut c = self.clone(); c.players[player_idx].resources.coal += 2; results.push(c);
+        }
+        if weapon >= 5 {
+            let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Boar as usize] += 1; results.push(c);
+        }
+        if weapon >= 6 {
+            let mut c = self.clone(); c.players[player_idx].resources.gold += 2; results.push(c);
+        }
         results
     }
 
@@ -808,12 +849,20 @@ impl GameState for State {
                             .collect();
                     }
 
+                    let adventures: usize = match space {
+                        ActionSpace::Logging => 1,
+                        ActionSpace::OreMineConstruction => 2,
+                        ActionSpace::Blacksmithing => 3,
+                        _ => 0,
+                    };
+
                     for c in &mut candidates {
-                        match next {
-                            Some(p) => c.current_player = p,
-                            None => {
-                                c.phase = Phase::Trading;
-                                c.current_player = 0;
+                        if adventures > 0 {
+                            c.phase = Phase::Adventuring { space, remaining: adventures };
+                        } else {
+                            match next {
+                                Some(p) => c.current_player = p,
+                                None => { c.phase = Phase::Trading; c.current_player = 0; }
                             }
                         }
                     }
@@ -821,6 +870,32 @@ impl GameState for State {
                     children.extend(candidates);
                 }
                 children
+            }
+
+            Phase::Adventuring { space, remaining } => {
+                let weapon = self.players[current].dwarfs.iter()
+                    .find(|d| d.placed_on == Some(space))
+                    .map(|d| d.weapon)
+                    .unwrap_or(0);
+                self.adventure_options(current, weapon)
+                    .into_iter()
+                    .map(|mut c| {
+                        if remaining == 1 {
+                            if let Some(d) = c.players[current].dwarfs.iter_mut()
+                                .find(|d| d.placed_on == Some(space))
+                            {
+                                if d.weapon > 0 { d.weapon = d.weapon.saturating_add(1); }
+                            }
+                            match c.next_placement_player() {
+                                Some(p) => { c.phase = Phase::Placement; c.current_player = p; }
+                                None    => { c.phase = Phase::Trading;   c.current_player = 0; }
+                            }
+                        } else {
+                            c.phase = Phase::Adventuring { space, remaining: remaining - 1 };
+                        }
+                        c
+                    })
+                    .collect()
             }
 
             Phase::Trading => {
