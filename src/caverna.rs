@@ -95,15 +95,30 @@ impl ActionSpace {
 const BOARD_WIDTH: usize = 6;
 const BOARD_HEIGHT: usize = 4;
 
+fn changed_cells(old: &[[Tile; BOARD_WIDTH]; BOARD_HEIGHT], new: &[[Tile; BOARD_WIDTH]; BOARD_HEIGHT]) -> Vec<(usize, usize)> {
+    (0..BOARD_HEIGHT).flat_map(|y| (0..BOARD_WIDTH).map(move |x| (x, y)))
+        .filter(|&(x, y)| old[y][x] != new[y][x])
+        .collect()
+}
+
 fn board_delta(old: &[[Tile; BOARD_WIDTH]; BOARD_HEIGHT], new: &[[Tile; BOARD_WIDTH]; BOARD_HEIGHT]) -> TileGroup {
-    let replaced: Vec<Tile> = old.iter().flatten()
-        .zip(new.iter().flatten())
-        .filter_map(|(&o, &n)| if o != n { Some(o) } else { None })
+    let replaced: Vec<Tile> = changed_cells(old, new).into_iter()
+        .map(|(x, y)| old[y][x])
         .collect();
     match replaced.as_slice() {
         &[t]      => TileGroup::Single(t),
         &[t1, t2] => TileGroup::Twin((t1, t2)),
         _         => panic!("unexpected board delta: {} tiles changed", replaced.len()),
+    }
+}
+
+fn apply_location_bonus((x, y): (usize, usize), resources: &mut Resources, animals: &mut Animals) {
+    match (x, y) {
+        (0, 2) | (2, 0) => animals[AnimalType::Boar as usize] += 1,
+        (1, 3)          => resources.food += 1,
+        (5, 0)          => resources.food += 2,
+        (4, 3)          => resources.food += 1,
+        _               => {}
     }
 }
 
@@ -685,6 +700,10 @@ impl GameState for State {
                             let mut c = child.clone();
                             let replaced = board_delta(&child.players[current].tiles, &board);
                             space.gain_placement_resources(replaced, &mut c.players[current].resources);
+                            for pos in changed_cells(&child.players[current].tiles, &board) {
+                                let p = &mut c.players[current];
+                                apply_location_bonus(pos, &mut p.resources, &mut p.animals);
+                            }
                             c.players[current].tiles = board;
                             c
                         }).collect()
