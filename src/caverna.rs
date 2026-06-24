@@ -333,8 +333,17 @@ impl Player {
         self.dwarfs.len() as i32 +
         self.resources.points as i32 +
         self.resources.rubies as i32 +
-        self.resources.wheat as i32 / 2 +
-        self.resources.vegetables as i32 +
+        {
+            let field_wheat: usize = self.tiles.iter().flatten()
+                .filter_map(|&t| if let Tile::Field((w, _)) = t { Some(w as usize) } else { None })
+                .sum();
+            let field_veg: usize = self.tiles.iter().flatten()
+                .filter_map(|&t| if let Tile::Field((_, v)) = t { Some(v as usize) } else { None })
+                .sum();
+            let wheat = self.resources.wheat + field_wheat;
+            let veg   = self.resources.vegetables + field_veg;
+            ((wheat + 1) / 2 + veg) as i32
+        } +
         self.dogs as i32 +
         self.animals.iter().sum::<usize>() as i32 -
         self.tiles.iter().flatten().map(|&t| t.points()).sum::<i32>() -
