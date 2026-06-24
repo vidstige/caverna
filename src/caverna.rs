@@ -375,13 +375,19 @@ impl Player {
             p.cells.len() * 2 * (1 << stables)
         }).collect();
 
-        let fixed_boar  = animals[AnimalType::Boar  as usize].min(boar_fixed);
-        let fixed_sheep = animals[AnimalType::Sheep as usize].min(sheep_meadow);
+        // Donkeys can live in mines (1 per ore mine or ruby mine)
+        let donkey_fixed_cap = self.tiles.iter().flatten()
+            .filter(|&&t| matches!(t, Tile::OreMine | Tile::RubyMine))
+            .count();
+
+        let fixed_boar   = animals[AnimalType::Boar   as usize].min(boar_fixed);
+        let fixed_sheep  = animals[AnimalType::Sheep  as usize].min(sheep_meadow);
+        let fixed_donkey = animals[AnimalType::Donkey as usize].min(donkey_fixed_cap);
         // Remaining to assign to pastures/flex, in priority order: cattle, boar, donkey, sheep
         let need = [
             animals[AnimalType::Cow    as usize],
             animals[AnimalType::Boar   as usize] - fixed_boar,
-            animals[AnimalType::Donkey as usize],
+            animals[AnimalType::Donkey as usize] - fixed_donkey,
             animals[AnimalType::Sheep  as usize] - fixed_sheep,
         ];
 
@@ -414,7 +420,7 @@ impl Player {
             }
         }
 
-        [best[AnimalType::Cow as usize], fixed_boar + best[AnimalType::Boar as usize], best[AnimalType::Donkey as usize], fixed_sheep + best[AnimalType::Sheep as usize]]
+        [best[AnimalType::Cow as usize], fixed_boar + best[AnimalType::Boar as usize], fixed_donkey + best[AnimalType::Donkey as usize], fixed_sheep + best[AnimalType::Sheep as usize]]
     }
 
     fn stable_count(&self) -> usize {
