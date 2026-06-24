@@ -806,6 +806,9 @@ impl GameState for State {
                         .placed_on = Some(space);
                     space.gain_resources(child.accumulated[space as usize], &mut child.players[current].resources);
                     space.gain_animals(child.accumulated[space as usize], &mut child.players[current].animals);
+                    if space == ActionSpace::StartingPlayer {
+                        child.starting_player = current as u8;
+                    }
 
                     let next = child.next_placement_player();
 
