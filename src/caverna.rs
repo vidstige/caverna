@@ -42,7 +42,7 @@ impl ActionSpace {
             ActionSpace::WoodGathering  => resources.wood += 1 + r,
             ActionSpace::Supplies       => {
                 resources.wood += 1; resources.stone += 1; resources.coal += 1;
-                resources.food += 1; resources.points += 2;
+                resources.food += 1; resources.gold += 2;
             }
             ActionSpace::StartingPlayer => { resources.coal += 2; resources.food += 1 + r; }
             ActionSpace::Clearing       => resources.wood += 1 + r,
@@ -200,7 +200,7 @@ pub struct Dwarf {
 
 #[derive(Clone, Copy)]
 pub struct Resources {
-    points: usize,
+    gold: usize,
     begging: usize,
 
     wood: usize,
@@ -208,19 +208,19 @@ pub struct Resources {
     coal: usize,
     rubies: usize,
     food: usize,
-    
+
     wheat: usize,
     vegetables: usize,
 }
 impl Resources {
     fn zero() -> Resources {
-        Resources { points: 0, begging: 0, wood: 0, stone: 0, coal: 0, rubies: 0, food: 0, wheat: 0, vegetables: 0 }
+        Resources { gold: 0, begging: 0, wood: 0, stone: 0, coal: 0, rubies: 0, food: 0, wheat: 0, vegetables: 0 }
     }
 
 }
 impl std::ops::AddAssign for Resources {
     fn add_assign(&mut self, rhs: Resources) {
-        self.points += rhs.points;
+        self.gold += rhs.gold;
         self.begging += rhs.begging;
         self.wood += rhs.wood;
         self.stone += rhs.stone;
@@ -331,7 +331,7 @@ impl Player {
     }
     pub fn points(&self) -> i32 {
         self.dwarfs.len() as i32 +
-        self.resources.points as i32 +
+        self.resources.gold as i32 +
         self.resources.rubies as i32 +
         {
             let field_wheat: usize = self.tiles.iter().flatten()
