@@ -746,24 +746,33 @@ impl State {
         if weapon == 0 {
             return vec![(self.clone(), 0)];
         }
-        let min_weapon = |i: usize| -> u8 {
-            match i { 0..=7 => (i / 2 + 1) as u8, 8 => 5, 9 => 6, _ => 7 }
-        };
+        // Item indices: 0 reserved (future lvl-1 item), then pairs per level:
+        //   lvl 1 → 1,2 | lvl 2 → 3,4 | lvl 3 → 5,6 | lvl 4 → 7,8
+        //   lvl 5 → 9,10 | lvl 6 → 11,12 | lvl 7 → 13,14
+        // min_weapon(i) = ((i+1)/2).max(1)
+        let min_weapon = |i: usize| -> u8 { (((i + 1) / 2).max(1)) as u8 };
         let avail = |i: usize| weapon >= min_weapon(i) && used_items & (1 << i) == 0;
         let mut results = vec![];
-        if avail(0) { let mut c = self.clone(); c.players[player_idx].resources.wood += 1; results.push((c, 1u16 << 0)); }
-        if avail(1) { let mut c = self.clone(); c.players[player_idx].dogs += 1; results.push((c, 1u16 << 1)); }
-        if avail(2) { let mut c = self.clone(); c.players[player_idx].resources.wheat += 1; results.push((c, 1u16 << 2)); }
-        if avail(3) { let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Sheep as usize] += 1; results.push((c, 1u16 << 3)); }
-        if avail(4) { let mut c = self.clone(); c.players[player_idx].resources.stone += 1; results.push((c, 1u16 << 4)); }
-        if avail(5) { let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Donkey as usize] += 1; results.push((c, 1u16 << 5)); }
-        if avail(6) { let mut c = self.clone(); c.players[player_idx].resources.vegetables += 1; results.push((c, 1u16 << 6)); }
-        if avail(7) { let mut c = self.clone(); c.players[player_idx].resources.coal += 2; results.push((c, 1u16 << 7)); }
-        if avail(8) { let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Boar as usize] += 1; results.push((c, 1u16 << 8)); }
-        if avail(9) { let mut c = self.clone(); c.players[player_idx].resources.gold += 2; results.push((c, 1u16 << 9)); }
-        if avail(10) {
+        // Level 1 (indices 1, 2)
+        if avail(1) { let mut c = self.clone(); c.players[player_idx].resources.wood += 1; results.push((c, 1u16 << 1)); }
+        if avail(2) { let mut c = self.clone(); c.players[player_idx].dogs += 1; results.push((c, 1u16 << 2)); }
+        // Level 2 (indices 3, 4)
+        if avail(3) { let mut c = self.clone(); c.players[player_idx].resources.wheat += 1; results.push((c, 1u16 << 3)); }
+        if avail(4) { let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Sheep as usize] += 1; results.push((c, 1u16 << 4)); }
+        // Level 3 (indices 5, 6)
+        if avail(5) { let mut c = self.clone(); c.players[player_idx].resources.stone += 1; results.push((c, 1u16 << 5)); }
+        if avail(6) { let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Donkey as usize] += 1; results.push((c, 1u16 << 6)); }
+        // Level 4 (indices 7, 8)
+        if avail(7) { let mut c = self.clone(); c.players[player_idx].resources.vegetables += 1; results.push((c, 1u16 << 7)); }
+        if avail(8) { let mut c = self.clone(); c.players[player_idx].resources.coal += 2; results.push((c, 1u16 << 8)); }
+        // Level 5 (indices 9, 10)
+        if avail(9) { let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Boar as usize] += 1; results.push((c, 1u16 << 9)); }
+        // Level 6 (indices 11, 12)
+        if avail(11) { let mut c = self.clone(); c.players[player_idx].resources.gold += 2; results.push((c, 1u16 << 11)); }
+        // Level 7 (indices 13, 14)
+        if avail(13) {
             for c in self.furnish_cave_options(player_idx) {
-                results.push((c, 1u16 << 10));
+                results.push((c, 1u16 << 13));
             }
         }
         // Weapon > 0 but all reachable items already picked — pass through with no reward
