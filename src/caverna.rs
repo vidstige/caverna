@@ -152,6 +152,16 @@ impl Tile {
         matches!(self, Tile::Meadow | Tile::MeadowStable)
     }
 
+    fn points(self) -> i32 {
+        match self {
+            Tile::Pasture | Tile::PastureStable => 2,
+            Tile::OreMine  => 3,
+            Tile::RubyMine => 4,
+            Tile::Dwelling => 0, // furnished dwellings score more — handled separately later
+            _ => 0,
+        }
+    }
+
     fn maybe_add_stable(self) -> Option<Tile> {
         match self {
             Tile::Forest  => Some(Tile::ForestStable),
@@ -312,6 +322,7 @@ impl Player {
         self.resources.vegetables as i32 +
         self.dogs as i32 +
         self.animals.iter().sum::<usize>() as i32 -
+        self.tiles.iter().flatten().map(|&t| t.points()).sum::<i32>() -
         self.resources.begging as i32 * 3 -
         self.tiles.iter().flatten().filter(|&&t| t.is_undeveloped()).count() as i32 -
         self.animals.iter().filter(|&&n| n == 0).count() as i32
