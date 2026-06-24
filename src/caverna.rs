@@ -22,9 +22,10 @@ pub enum ActionSpace {
     OreDelivery = 16,
     RubyDelivery = 17,
     Adventure = 18,
+    Housework = 19,
 }
 impl ActionSpace {
-    const COUNT: usize = 19;
+    const COUNT: usize = 20;
     const ALL: [ActionSpace; Self::COUNT] = [
         ActionSpace::Logging,
         ActionSpace::WoodGathering,
@@ -45,6 +46,7 @@ impl ActionSpace {
         ActionSpace::OreDelivery,
         ActionSpace::RubyDelivery,
         ActionSpace::Adventure,
+        ActionSpace::Housework,
     ];
 
     fn picks_per_adventure(self) -> usize {
@@ -87,7 +89,7 @@ impl ActionSpace {
             ActionSpace::OreDelivery => { resources.stone += 1 + r; resources.coal += 1 + r; }
             ActionSpace::RubyDelivery => resources.rubies += 2 + r,
             ActionSpace::OreMineConstruction | ActionSpace::RubyMineConstruction
-            | ActionSpace::Blacksmithing | ActionSpace::Adventure => {}
+            | ActionSpace::Blacksmithing | ActionSpace::Adventure | ActionSpace::Housework => {}
         }
     }
     fn gain_animals(self, accumulated: u32, animals: &mut Animals) {
@@ -224,6 +226,18 @@ impl Tile {
         }
     }
 }
+
+#[derive(Clone, Copy)]
+struct Furnishing {
+    tile: Tile,
+    cost_wood: usize,
+    cost_stone: usize,
+    max_count: usize,
+}
+
+const FURNISHINGS: &[Furnishing] = &[
+    Furnishing { tile: Tile::Dwelling, cost_wood: 4, cost_stone: 3, max_count: 16 },
+];
 
 enum TileGroup {
     Single(Tile),
@@ -383,7 +397,12 @@ impl Player {
             ((wheat + 1) / 2 + veg) as i32
         } +
         self.dogs as i32 +
-        self.animals.iter().sum::<usize>() as i32 -
+        self.animals.iter().sum::<usize>() as i32 +
+        {
+            // 3 points per dwelling; subtract 3 for the initial unfurnished one
+            let dwellings = self.tiles.iter().flatten().filter(|&&t| t == Tile::Dwelling).count() as i32;
+            dwellings * 3 - 3
+        } -
         self.tiles.iter().flatten().map(|&t| t.points()).sum::<i32>() -
         self.resources.begging as i32 * 3 -
         self.tiles.iter().flatten().filter(|&&t| t.is_undeveloped()).count() as i32 -
@@ -728,7 +747,7 @@ impl State {
             return vec![(self.clone(), 0)];
         }
         let min_weapon = |i: usize| -> u8 {
-            match i { 0..=7 => (i / 2 + 1) as u8, 8 => 5, _ => 6 }
+            match i { 0..=7 => (i / 2 + 1) as u8, 8 => 5, 9 => 6, _ => 7 }
         };
         let avail = |i: usize| weapon >= min_weapon(i) && used_items & (1 << i) == 0;
         let mut results = vec![];
@@ -742,9 +761,44 @@ impl State {
         if avail(7) { let mut c = self.clone(); c.players[player_idx].resources.coal += 2; results.push((c, 1u16 << 7)); }
         if avail(8) { let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Boar as usize] += 1; results.push((c, 1u16 << 8)); }
         if avail(9) { let mut c = self.clone(); c.players[player_idx].resources.gold += 2; results.push((c, 1u16 << 9)); }
+        if avail(10) {
+            for c in self.furnish_cave_options(player_idx) {
+                results.push((c, 1u16 << 10));
+            }
+        }
         // Weapon > 0 but all reachable items already picked — pass through with no reward
         if results.is_empty() { results.push((self.clone(), 0)); }
         results
+    }
+
+    fn furnish_cave_options(&self, player_idx: usize) -> Vec<Self> {
+        let p = &self.players[player_idx];
+        let mut opts = vec![];
+        for y in 0..BOARD_HEIGHT {
+            for x in 0..BOARD_WIDTH {
+                if p.tiles[y][x] != Tile::Cave {
+                    continue;
+                }
+                for f in FURNISHINGS {
+                    if p.resources.wood < f.cost_wood || p.resources.stone < f.cost_stone {
+                        continue;
+                    }
+                    let used = self.players.iter()
+                        .flat_map(|pl| pl.tiles.iter().flatten())
+                        .filter(|&&t| t == f.tile)
+                        .count();
+                    if used >= f.max_count {
+                        continue;
+                    }
+                    let mut c = self.clone();
+                    c.players[player_idx].resources.wood -= f.cost_wood;
+                    c.players[player_idx].resources.stone -= f.cost_stone;
+                    c.players[player_idx].tiles[y][x] = f.tile;
+                    opts.push(c);
+                }
+            }
+        }
+        opts
     }
 
     fn forge_options(&self, player_idx: usize, space: ActionSpace) -> Vec<Self> {
@@ -903,6 +957,18 @@ impl GameState for State {
                                     opts.extend(c.forge_options(current, space));
                                     opts
                                 }
+                            })
+                            .collect();
+                    }
+
+                    if space == ActionSpace::Housework {
+                        for c in &mut candidates {
+                            c.players[current].dogs += 1;
+                        }
+                        candidates = candidates.into_iter()
+                            .flat_map(|c| {
+                                let opts = c.furnish_cave_options(current);
+                                if opts.is_empty() { vec![c] } else { opts }
                             })
                             .collect();
                     }
