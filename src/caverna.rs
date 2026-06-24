@@ -16,9 +16,10 @@ pub enum ActionSpace {
     DonkeyFarming = 10,
     OreMineConstruction = 11,
     RubyMineConstruction = 12,
+    Blacksmithing = 13,
 }
 impl ActionSpace {
-    const COUNT: usize = 13;
+    const COUNT: usize = 14;
     const ALL: [ActionSpace; Self::COUNT] = [
         ActionSpace::Logging,
         ActionSpace::WoodGathering,
@@ -33,6 +34,7 @@ impl ActionSpace {
         ActionSpace::DonkeyFarming,
         ActionSpace::OreMineConstruction,
         ActionSpace::RubyMineConstruction,
+        ActionSpace::Blacksmithing,
     ];
 
     fn gain_resources(self, rounds: u32, resources: &mut Resources) {
@@ -52,7 +54,8 @@ impl ActionSpace {
             ActionSpace::Excavation     => resources.stone += 1 + r,
             ActionSpace::SheepFarming        => {}
             ActionSpace::DonkeyFarming       => {}
-            ActionSpace::OreMineConstruction | ActionSpace::RubyMineConstruction => {}
+            ActionSpace::OreMineConstruction | ActionSpace::RubyMineConstruction
+            | ActionSpace::Blacksmithing => {}
         }
     }
     fn gain_animals(self, accumulated: u32, animals: &mut Animals) {
@@ -86,7 +89,8 @@ impl ActionSpace {
                 vec![TileGroup::Twin((Tile::OreTunnel, Tile::OreMine))],
             ActionSpace::RubyMineConstruction =>
                 vec![TileGroup::Single(Tile::RubyMine)],
-            ActionSpace::SheepFarming | ActionSpace::DonkeyFarming => vec![],
+            ActionSpace::SheepFarming | ActionSpace::DonkeyFarming
+            | ActionSpace::Blacksmithing => vec![],
             _ => vec![],
         }
     }
@@ -671,6 +675,19 @@ impl State {
         results
     }
 
+    fn blacksmith_options(&self, player_idx: usize) -> Vec<Self> {
+        let coal = self.players[player_idx].resources.coal;
+        (1..=coal.min(8)).map(|strength| {
+            let mut c = self.clone();
+            c.players[player_idx].resources.coal -= strength;
+            c.players[player_idx].dwarfs.iter_mut()
+                .find(|d| d.placed_on == Some(ActionSpace::Blacksmithing))
+                .expect("no dwarf on Blacksmithing")
+                .weapon = strength as u8;
+            c
+        }).collect()
+    }
+
     fn sow_options(&self, player_idx: usize) -> Vec<Self> {
         let player = &self.players[player_idx];
         let empty: Vec<(usize, usize)> = (0..BOARD_HEIGHT)
@@ -771,6 +788,12 @@ impl GameState for State {
                             }
                         }).collect()
                     };
+
+                    if space == ActionSpace::Blacksmithing {
+                        candidates = candidates.into_iter()
+                            .flat_map(|c| c.blacksmith_options(current))
+                            .collect();
+                    }
 
                     if space == ActionSpace::SlashAndBurn {
                         candidates = candidates.into_iter()
