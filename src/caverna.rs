@@ -19,9 +19,11 @@ pub enum ActionSpace {
     Blacksmithing = 13,
     OreMining = 14,
     RubyMining = 15,
+    OreDelivery = 16,
+    RubyDelivery = 17,
 }
 impl ActionSpace {
-    const COUNT: usize = 16;
+    const COUNT: usize = 18;
     const ALL: [ActionSpace; Self::COUNT] = [
         ActionSpace::Logging,
         ActionSpace::WoodGathering,
@@ -39,6 +41,8 @@ impl ActionSpace {
         ActionSpace::Blacksmithing,
         ActionSpace::OreMining,
         ActionSpace::RubyMining,
+        ActionSpace::OreDelivery,
+        ActionSpace::RubyDelivery,
     ];
 
     fn gain_resources(self, rounds: u32, resources: &mut Resources) {
@@ -58,8 +62,10 @@ impl ActionSpace {
             ActionSpace::Excavation     => resources.stone += 1 + r,
             ActionSpace::SheepFarming        => {}
             ActionSpace::DonkeyFarming       => {}
-            ActionSpace::OreMining  => resources.coal   += 2 + r,
-            ActionSpace::RubyMining => resources.rubies += 1 + r,
+            ActionSpace::OreMining   => resources.coal   += 2 + r,
+            ActionSpace::RubyMining  => resources.rubies += 1 + r,
+            ActionSpace::OreDelivery => { resources.stone += 1 + r; resources.coal += 1 + r; }
+            ActionSpace::RubyDelivery => resources.rubies += 2 + r,
             ActionSpace::OreMineConstruction | ActionSpace::RubyMineConstruction
             | ActionSpace::Blacksmithing => {}
         }
@@ -97,7 +103,8 @@ impl ActionSpace {
                 vec![TileGroup::Single(Tile::RubyMine)],
             ActionSpace::SheepFarming | ActionSpace::DonkeyFarming
             | ActionSpace::Blacksmithing
-            | ActionSpace::OreMining | ActionSpace::RubyMining => vec![],
+            | ActionSpace::OreMining | ActionSpace::RubyMining
+            | ActionSpace::OreDelivery | ActionSpace::RubyDelivery => vec![],
             _ => vec![],
         }
     }
@@ -816,7 +823,7 @@ impl GameState for State {
                     if space == ActionSpace::StartingPlayer {
                         child.starting_player = current as u8;
                     }
-                    if space == ActionSpace::OreMining {
+                    if space == ActionSpace::OreMining || space == ActionSpace::OreDelivery {
                         let mines = child.players[current].tiles.iter().flatten()
                             .filter(|&&t| t == Tile::OreMine).count();
                         child.players[current].resources.coal += mines * 2;
@@ -825,6 +832,11 @@ impl GameState for State {
                         let has_mine = child.players[current].tiles.iter().flatten()
                             .any(|&t| t == Tile::RubyMine);
                         if has_mine { child.players[current].resources.rubies += 1; }
+                    }
+                    if space == ActionSpace::RubyDelivery {
+                        let mines = child.players[current].tiles.iter().flatten()
+                            .filter(|&&t| t == Tile::RubyMine).count();
+                        if mines >= 2 { child.players[current].resources.rubies += 1; }
                     }
 
                     let next = child.next_placement_player();
