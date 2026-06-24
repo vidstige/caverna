@@ -63,6 +63,17 @@ impl ActionSpace {
             _ => {}
         }
     }
+    fn gain_placement_resources(self, replaced: TileToPlace, resources: &mut Resources) {
+        match self {
+            ActionSpace::OreMineConstruction => resources.coal += 3,
+            ActionSpace::RubyMineConstruction => {
+                if matches!(replaced, TileToPlace::Single(Tile::OreTunnel)) {
+                    resources.rubies += 1;
+                }
+            }
+            _ => {}
+        }
+    }
     fn place_tile(self) -> Vec<TileToPlace> {
         match self {
             ActionSpace::Clearing | ActionSpace::Sustenance | ActionSpace::SlashAndBurn =>
@@ -83,6 +94,18 @@ impl ActionSpace {
 
 const BOARD_WIDTH: usize = 6;
 const BOARD_HEIGHT: usize = 4;
+
+fn board_delta(old: &[[Tile; BOARD_WIDTH]; BOARD_HEIGHT], new: &[[Tile; BOARD_WIDTH]; BOARD_HEIGHT]) -> TileToPlace {
+    let replaced: Vec<Tile> = old.iter().flatten()
+        .zip(new.iter().flatten())
+        .filter_map(|(&o, &n)| if o != n { Some(o) } else { None })
+        .collect();
+    match replaced.as_slice() {
+        &[t]      => TileToPlace::Single(t),
+        &[t1, t2] => TileToPlace::Twin((t1, t2)),
+        _         => panic!("unexpected board delta: {} tiles changed", replaced.len()),
+    }
+}
 
 fn adjacents(x: usize, y: usize) -> impl Iterator<Item = (usize, usize)> {
     [(x.wrapping_sub(1), y), (x + 1, y), (x, y.wrapping_sub(1)), (x, y + 1)]
@@ -649,6 +672,8 @@ impl GameState for State {
                     } else {
                         boards.into_iter().map(|board| {
                             let mut c = child.clone();
+                            let replaced = board_delta(&child.players[current].tiles, &board);
+                            space.gain_placement_resources(replaced, &mut c.players[current].resources);
                             c.players[current].tiles = board;
                             c
                         }).collect()
