@@ -485,12 +485,17 @@ impl Player {
     }
 }
 
+#[derive(Clone, PartialEq)]
+enum Phase { Placement, Trading }
+
 #[derive(Clone)]
 pub struct State {
     pub players: Vec<Player>,
     pub round: u32,
     pub starting_player: u8,
     pub accumulated: [u32; ActionSpace::COUNT],
+    current_player: usize,
+    phase: Phase,
 }
 impl State {
     pub fn new(count: u32) -> Self {
@@ -498,7 +503,7 @@ impl State {
         for _ in 0..count {
             players.push(Player::new(2));
         }
-        State { players, round: 0, starting_player: 0, accumulated: [0u32; ActionSpace::COUNT] }
+        State { players, round: 0, starting_player: 0, accumulated: [0u32; ActionSpace::COUNT], current_player: 0, phase: Phase::Placement }
     }
     fn rounds(&self) -> u32 {
         match self.players.len() {
@@ -532,6 +537,64 @@ impl State {
             player.harvest();
             player.feed();
             player.breed();
+        }
+    }
+
+    fn next_placement_player(&self) -> Option<usize> {
+        let n = self.players.len();
+        for i in 1..=n {
+            let next = (self.current_player + i) % n;
+            if self.players[next].dwarfs.iter().any(|d| d.placed_on.is_none()) {
+                return Some(next);
+            }
+        }
+        None
+    }
+
+    // Used only by verify() — re-derives current_player from dwarf state.
+    fn derive_current_player(&self) -> usize {
+        let n = self.players.len();
+        let placed: Vec<usize> = self.players.iter()
+            .map(|p| p.dwarfs.iter().filter(|d| d.placed_on.is_some()).count())
+            .collect();
+        let total_placed: usize = placed.iter().sum();
+        let total_dwarves: Vec<usize> = self.players.iter().map(|p| p.dwarfs.len()).collect();
+        let mut turns = 0;
+        let mut seat = self.starting_player as usize;
+        let max_iter = total_dwarves.iter().sum::<usize>() * n + 1;
+        for _ in 0..max_iter {
+            if placed[seat] < total_dwarves[seat] {
+                if turns == total_placed { return seat; }
+                turns += 1;
+            }
+            seat = (seat + 1) % n;
+        }
+        self.starting_player as usize
+    }
+
+    pub fn verify(&self) {
+        match self.phase {
+            Phase::Placement => {
+                let derived = self.derive_current_player();
+                assert_eq!(
+                    self.current_player, derived,
+                    "current_player mismatch: explicit={}, derived={}",
+                    self.current_player, derived
+                );
+            }
+            Phase::Trading => {
+                assert!(
+                    self.players.iter().all(|p| p.dwarfs.iter().all(|d| d.placed_on.is_some())),
+                    "not all dwarves placed during Trading phase"
+                );
+                assert!(
+                    self.current_player < self.players.len(),
+                    "current_player {} out of range", self.current_player
+                );
+            }
+        }
+        for player in &self.players {
+            player.verify_pastures();
         }
     }
     fn pasture_options(&self, player_idx: usize) -> Vec<Self> {
@@ -647,28 +710,7 @@ fn subsets_up_to_2(items: &[(usize, usize)]) -> Vec<Vec<(usize, usize)>> {
 
 impl GameState for State {
     fn current_player(&self) -> usize {
-        let n = self.players.len();
-        let placed: Vec<usize> = self.players.iter()
-            .map(|p| p.dwarfs.iter().filter(|d| d.placed_on.is_some()).count())
-            .collect();
-        let total_placed: usize = placed.iter().sum();
-        let total_dwarves: Vec<usize> = self.players.iter().map(|p| p.dwarfs.len()).collect();
-
-        // Replay the clockwise turn sequence to find who goes next.
-        // Each step advances past a player who still has dwarves to place.
-        let mut turns = 0;
-        let mut seat = self.starting_player as usize;
-        let max_iter = total_dwarves.iter().sum::<usize>() * n + 1;
-        for _ in 0..max_iter {
-            if placed[seat] < total_dwarves[seat] {
-                if turns == total_placed {
-                    return seat;
-                }
-                turns += 1;
-            }
-            seat = (seat + 1) % n;
-        }
-        self.starting_player as usize
+        self.current_player
     }
 
     fn num_players(&self) -> usize {
@@ -680,73 +722,179 @@ impl GameState for State {
             return vec![];
         }
 
-        let current = self.current_player();
-        let mut children = vec![];
-        for &space in &ActionSpace::ALL {
-            let occupied = self.players.iter()
-                .any(|p| p.dwarfs.iter().any(|d| d.placed_on == Some(space)));
-            if occupied {
-                continue;
-            }
-            let mut child = self.clone();
-            child.players[current].dwarfs.iter_mut()
-                .find(|d| d.placed_on.is_none())
-                .expect("current player has no unplaced dwarf")
-                .placed_on = Some(space);
-            space.gain_resources(child.accumulated[space as usize], &mut child.players[current].resources);
-            space.gain_animals(child.accumulated[space as usize], &mut child.players[current].animals);
+        let current = self.current_player;
 
-            let tile_choices = space.place_tile();
-            let mut candidates = if tile_choices.is_empty() {
-                vec![child]
-            } else {
-                tile_choices.into_iter().flat_map(|tile| {
-                    let boards = child.players[current].tile_placements(tile);
-                    if boards.is_empty() {
-                        vec![child.clone()]
+        match self.phase {
+            Phase::Placement => {
+                let mut children = vec![];
+                for &space in &ActionSpace::ALL {
+                    let occupied = self.players.iter()
+                        .any(|p| p.dwarfs.iter().any(|d| d.placed_on == Some(space)));
+                    if occupied { continue; }
+
+                    let mut child = self.clone();
+                    child.players[current].dwarfs.iter_mut()
+                        .find(|d| d.placed_on.is_none())
+                        .expect("current player has no unplaced dwarf")
+                        .placed_on = Some(space);
+                    space.gain_resources(child.accumulated[space as usize], &mut child.players[current].resources);
+                    space.gain_animals(child.accumulated[space as usize], &mut child.players[current].animals);
+
+                    let next = child.next_placement_player();
+
+                    let tile_choices = space.place_tile();
+                    let mut candidates = if tile_choices.is_empty() {
+                        vec![child]
                     } else {
-                        boards.into_iter().map(|board| {
-                            let mut c = child.clone();
-                            let replaced = board_delta(&child.players[current].tiles, &board);
-                            space.gain_placement_resources(replaced, &mut c.players[current].resources);
-                            for pos in changed_cells(&child.players[current].tiles, &board) {
-                                let p = &mut c.players[current];
-                                apply_location_bonus(pos, &mut p.resources, &mut p.animals);
+                        tile_choices.into_iter().flat_map(|tile| {
+                            let boards = child.players[current].tile_placements(tile);
+                            if boards.is_empty() {
+                                vec![child.clone()]
+                            } else {
+                                boards.into_iter().map(|board| {
+                                    let mut c = child.clone();
+                                    let replaced = board_delta(&child.players[current].tiles, &board);
+                                    space.gain_placement_resources(replaced, &mut c.players[current].resources);
+                                    for pos in changed_cells(&child.players[current].tiles, &board) {
+                                        let p = &mut c.players[current];
+                                        apply_location_bonus(pos, &mut p.resources, &mut p.animals);
+                                    }
+                                    c.players[current].tiles = board;
+                                    c
+                                }).collect()
                             }
-                            c.players[current].tiles = board;
-                            c
                         }).collect()
+                    };
+
+                    if space == ActionSpace::SlashAndBurn {
+                        candidates = candidates.into_iter()
+                            .flat_map(|c| c.sow_options(current))
+                            .collect();
                     }
-                }).collect()
-            };
 
-            if space == ActionSpace::SlashAndBurn {
-                candidates = candidates.into_iter()
-                    .flat_map(|c| c.sow_options(current))
-                    .collect();
-            }
+                    if matches!(space, ActionSpace::SheepFarming | ActionSpace::DonkeyFarming) {
+                        candidates = candidates.into_iter()
+                            .flat_map(|c| c.pasture_options(current))
+                            .flat_map(|c| c.stable_options(current))
+                            .collect();
+                    }
 
-            if matches!(space, ActionSpace::SheepFarming | ActionSpace::DonkeyFarming) {
-                candidates = candidates.into_iter()
-                    .flat_map(|c| c.pasture_options(current))
-                    .flat_map(|c| c.stable_options(current))
-                    .collect();
-            }
+                    for c in &mut candidates {
+                        match next {
+                            Some(p) => c.current_player = p,
+                            None => {
+                                c.phase = Phase::Trading;
+                                c.current_player = 0;
+                            }
+                        }
+                    }
 
-            let all_placed = candidates[0].players.iter()
-                .all(|p| p.dwarfs.iter().all(|d| d.placed_on.is_some()));
-            if all_placed {
-                for c in &mut candidates {
-                    c.replenish();
-                    c.return_dwarfs();
-                    c.harvest();
-                    c.round += 1;
+                    children.extend(candidates);
                 }
+                children
             }
 
-            children.extend(candidates);
+            Phase::Trading => {
+                let food_needed = self.players[current].dwarfs.len();
+                let mut children = vec![];
+
+                // "Done trading" — advance to next player or execute harvest
+                let mut done = self.clone();
+                if current + 1 < self.players.len() {
+                    done.current_player = current + 1;
+                } else {
+                    done.replenish();
+                    done.return_dwarfs();
+                    done.harvest();
+                    done.round += 1;
+                    done.current_player = done.starting_player as usize;
+                    done.phase = Phase::Placement;
+                }
+                children.push(done);
+
+                // Trade actions — only offered when more food is needed.
+                // For each resource, offer 1..=n units where n covers the gap
+                // (ceiling division, so multi-food trades may overshoot by a little).
+                let p = &self.players[current];
+                let food_gap = food_needed.saturating_sub(p.resources.food);
+
+                if food_gap > 0 {
+                    let sheep  = p.animals[AnimalType::Sheep  as usize];
+                    let boar   = p.animals[AnimalType::Boar   as usize];
+                    let cow    = p.animals[AnimalType::Cow    as usize];
+                    let donkey = p.animals[AnimalType::Donkey as usize];
+                    let wheat  = p.resources.wheat;
+                    let veg    = p.resources.vegetables;
+                    let rubies = p.resources.rubies;
+
+                    // 1 sheep → 1 food
+                    for n in 1..=sheep.min(food_gap) {
+                        let mut c = self.clone();
+                        c.players[current].animals[AnimalType::Sheep as usize] -= n;
+                        c.players[current].resources.food += n;
+                        children.push(c);
+                    }
+
+                    // 1 boar → 2 food
+                    for n in 1..=boar.min((food_gap + 1) / 2) {
+                        let mut c = self.clone();
+                        c.players[current].animals[AnimalType::Boar as usize] -= n;
+                        c.players[current].resources.food += n * 2;
+                        children.push(c);
+                    }
+
+                    // 1 cow → 3 food
+                    for n in 1..=cow.min((food_gap + 2) / 3) {
+                        let mut c = self.clone();
+                        c.players[current].animals[AnimalType::Cow as usize] -= n;
+                        c.players[current].resources.food += n * 3;
+                        children.push(c);
+                    }
+
+                    // 1 donkey → 1 food (only when no pair trade is possible)
+                    if donkey == 1 {
+                        let mut c = self.clone();
+                        c.players[current].animals[AnimalType::Donkey as usize] -= 1;
+                        c.players[current].resources.food += 1;
+                        children.push(c);
+                    }
+
+                    // 2 donkeys → 3 food (bulk rate)
+                    for n in 1..=(donkey / 2).min((food_gap + 2) / 3) {
+                        let mut c = self.clone();
+                        c.players[current].animals[AnimalType::Donkey as usize] -= n * 2;
+                        c.players[current].resources.food += n * 3;
+                        children.push(c);
+                    }
+
+                    // 1 wheat → 1 food
+                    for n in 1..=wheat.min(food_gap) {
+                        let mut c = self.clone();
+                        c.players[current].resources.wheat -= n;
+                        c.players[current].resources.food += n;
+                        children.push(c);
+                    }
+
+                    // 1 vegetable → 2 food
+                    for n in 1..=veg.min((food_gap + 1) / 2) {
+                        let mut c = self.clone();
+                        c.players[current].resources.vegetables -= n;
+                        c.players[current].resources.food += n * 2;
+                        children.push(c);
+                    }
+
+                    // 1 ruby → 2 food
+                    for n in 1..=rubies.min((food_gap + 1) / 2) {
+                        let mut c = self.clone();
+                        c.players[current].resources.rubies -= n;
+                        c.players[current].resources.food += n * 2;
+                        children.push(c);
+                    }
+                }
+
+                children
+            }
         }
-        children
     }
 
     fn winner(&self) -> Option<usize> {
