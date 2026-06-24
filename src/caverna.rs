@@ -21,9 +21,10 @@ pub enum ActionSpace {
     RubyMining = 15,
     OreDelivery = 16,
     RubyDelivery = 17,
+    Adventure = 18,
 }
 impl ActionSpace {
-    const COUNT: usize = 18;
+    const COUNT: usize = 19;
     const ALL: [ActionSpace; Self::COUNT] = [
         ActionSpace::Logging,
         ActionSpace::WoodGathering,
@@ -43,7 +44,26 @@ impl ActionSpace {
         ActionSpace::RubyMining,
         ActionSpace::OreDelivery,
         ActionSpace::RubyDelivery,
+        ActionSpace::Adventure,
     ];
+
+    fn picks_per_adventure(self) -> usize {
+        match self {
+            ActionSpace::Logging => 1,
+            ActionSpace::OreMineConstruction => 2,
+            ActionSpace::Blacksmithing => 3,
+            ActionSpace::Adventure => 1,
+            _ => 0,
+        }
+    }
+
+    fn adventure_count(self) -> usize {
+        match self {
+            ActionSpace::Logging | ActionSpace::OreMineConstruction | ActionSpace::Blacksmithing => 1,
+            ActionSpace::Adventure => 2,
+            _ => 0,
+        }
+    }
 
     fn gain_resources(self, rounds: u32, resources: &mut Resources) {
         let r = rounds as usize;
@@ -67,7 +87,7 @@ impl ActionSpace {
             ActionSpace::OreDelivery => { resources.stone += 1 + r; resources.coal += 1 + r; }
             ActionSpace::RubyDelivery => resources.rubies += 2 + r,
             ActionSpace::OreMineConstruction | ActionSpace::RubyMineConstruction
-            | ActionSpace::Blacksmithing => {}
+            | ActionSpace::Blacksmithing | ActionSpace::Adventure => {}
         }
     }
     fn gain_animals(self, accumulated: u32, animals: &mut Animals) {
@@ -102,7 +122,7 @@ impl ActionSpace {
             ActionSpace::RubyMineConstruction =>
                 vec![TileGroup::Single(Tile::RubyMine)],
             ActionSpace::SheepFarming | ActionSpace::DonkeyFarming
-            | ActionSpace::Blacksmithing
+            | ActionSpace::Blacksmithing | ActionSpace::Adventure
             | ActionSpace::OreMining | ActionSpace::RubyMining
             | ActionSpace::OreDelivery | ActionSpace::RubyDelivery => vec![],
             _ => vec![],
@@ -512,7 +532,7 @@ impl Player {
 #[derive(Clone, PartialEq)]
 enum Phase {
     Placement,
-    Adventuring { space: ActionSpace, remaining: usize },
+    Adventuring { space: ActionSpace, remaining_picks: usize, remaining_adventures: usize, used_items: u16 },
     Trading,
 }
 
@@ -613,8 +633,8 @@ impl State {
                     self.current_player, derived
                 );
             }
-            Phase::Adventuring { space, remaining } => {
-                assert!(remaining >= 1, "Adventuring remaining must be >= 1");
+            Phase::Adventuring { space, remaining_picks, .. } => {
+                assert!(remaining_picks >= 1, "Adventuring remaining_picks must be >= 1");
                 assert!(
                     self.players[self.current_player].dwarfs.iter().any(|d| d.placed_on == Some(space)),
                     "current player has no dwarf on {:?} during Adventuring", space as usize
@@ -703,40 +723,34 @@ impl State {
         results
     }
 
-    fn adventure_options(&self, player_idx: usize, weapon: u8) -> Vec<Self> {
+    fn adventure_options(&self, player_idx: usize, weapon: u8, used_items: u16) -> Vec<(Self, u16)> {
         if weapon == 0 {
-            return vec![self.clone()];
+            return vec![(self.clone(), 0)];
         }
+        let min_weapon = |i: usize| -> u8 {
+            match i { 0..=7 => (i / 2 + 1) as u8, 8 => 5, _ => 6 }
+        };
+        let avail = |i: usize| weapon >= min_weapon(i) && used_items & (1 << i) == 0;
         let mut results = vec![];
-        if weapon >= 1 {
-            let mut c = self.clone(); c.players[player_idx].resources.wood += 1; results.push(c);
-            let mut c = self.clone(); c.players[player_idx].dogs += 1; results.push(c);
-        }
-        if weapon >= 2 {
-            let mut c = self.clone(); c.players[player_idx].resources.wheat += 1; results.push(c);
-            let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Sheep as usize] += 1; results.push(c);
-        }
-        if weapon >= 3 {
-            let mut c = self.clone(); c.players[player_idx].resources.stone += 1; results.push(c);
-            let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Donkey as usize] += 1; results.push(c);
-        }
-        if weapon >= 4 {
-            let mut c = self.clone(); c.players[player_idx].resources.vegetables += 1; results.push(c);
-            let mut c = self.clone(); c.players[player_idx].resources.coal += 2; results.push(c);
-        }
-        if weapon >= 5 {
-            let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Boar as usize] += 1; results.push(c);
-        }
-        if weapon >= 6 {
-            let mut c = self.clone(); c.players[player_idx].resources.gold += 2; results.push(c);
-        }
+        if avail(0) { let mut c = self.clone(); c.players[player_idx].resources.wood += 1; results.push((c, 1u16 << 0)); }
+        if avail(1) { let mut c = self.clone(); c.players[player_idx].dogs += 1; results.push((c, 1u16 << 1)); }
+        if avail(2) { let mut c = self.clone(); c.players[player_idx].resources.wheat += 1; results.push((c, 1u16 << 2)); }
+        if avail(3) { let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Sheep as usize] += 1; results.push((c, 1u16 << 3)); }
+        if avail(4) { let mut c = self.clone(); c.players[player_idx].resources.stone += 1; results.push((c, 1u16 << 4)); }
+        if avail(5) { let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Donkey as usize] += 1; results.push((c, 1u16 << 5)); }
+        if avail(6) { let mut c = self.clone(); c.players[player_idx].resources.vegetables += 1; results.push((c, 1u16 << 6)); }
+        if avail(7) { let mut c = self.clone(); c.players[player_idx].resources.coal += 2; results.push((c, 1u16 << 7)); }
+        if avail(8) { let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Boar as usize] += 1; results.push((c, 1u16 << 8)); }
+        if avail(9) { let mut c = self.clone(); c.players[player_idx].resources.gold += 2; results.push((c, 1u16 << 9)); }
+        // Weapon > 0 but all reachable items already picked — pass through with no reward
+        if results.is_empty() { results.push((self.clone(), 0)); }
         results
     }
 
-    fn blacksmith_options(&self, player_idx: usize) -> Vec<Self> {
+    fn forge_options(&self, player_idx: usize, space: ActionSpace) -> Vec<Self> {
         let dwarf = self.players[player_idx].dwarfs.iter()
-            .find(|d| d.placed_on == Some(ActionSpace::Blacksmithing))
-            .expect("no dwarf on Blacksmithing");
+            .find(|d| d.placed_on == Some(space))
+            .expect("no dwarf on space");
         if dwarf.weapon != 0 {
             return vec![];
         }
@@ -745,8 +759,8 @@ impl State {
             let mut c = self.clone();
             c.players[player_idx].resources.coal -= strength;
             c.players[player_idx].dwarfs.iter_mut()
-                .find(|d| d.placed_on == Some(ActionSpace::Blacksmithing))
-                .expect("no dwarf on Blacksmithing")
+                .find(|d| d.placed_on == Some(space))
+                .expect("no dwarf on space in forge_options")
                 .weapon = strength as u8;
             c
         }).collect()
@@ -873,7 +887,23 @@ impl GameState for State {
 
                     if space == ActionSpace::Blacksmithing {
                         candidates = candidates.into_iter()
-                            .flat_map(|c| c.blacksmith_options(current))
+                            .flat_map(|c| c.forge_options(current, space))
+                            .collect();
+                    }
+                    if space == ActionSpace::Adventure {
+                        candidates = candidates.into_iter()
+                            .flat_map(|c| {
+                                let armed = c.players[current].dwarfs.iter()
+                                    .find(|d| d.placed_on == Some(space))
+                                    .map_or(false, |d| d.weapon > 0);
+                                if armed {
+                                    vec![c]
+                                } else {
+                                    let mut opts = vec![c.clone()];
+                                    opts.extend(c.forge_options(current, space));
+                                    opts
+                                }
+                            })
                             .collect();
                     }
 
@@ -890,16 +920,11 @@ impl GameState for State {
                             .collect();
                     }
 
-                    let adventures: usize = match space {
-                        ActionSpace::Logging => 1,
-                        ActionSpace::OreMineConstruction => 2,
-                        ActionSpace::Blacksmithing => 3,
-                        _ => 0,
-                    };
+                    let adventures = space.adventure_count();
 
                     for c in &mut candidates {
                         if adventures > 0 {
-                            c.phase = Phase::Adventuring { space, remaining: adventures };
+                            c.phase = Phase::Adventuring { space, remaining_picks: space.picks_per_adventure(), remaining_adventures: adventures, used_items: 0 };
                         } else {
                             match next {
                                 Some(p) => c.current_player = p,
@@ -913,26 +938,31 @@ impl GameState for State {
                 children
             }
 
-            Phase::Adventuring { space, remaining } => {
+            Phase::Adventuring { space, remaining_picks, remaining_adventures, used_items } => {
                 let weapon = self.players[current].dwarfs.iter()
                     .find(|d| d.placed_on == Some(space))
                     .map(|d| d.weapon)
                     .unwrap_or(0);
-                self.adventure_options(current, weapon)
+                self.adventure_options(current, weapon, used_items)
                     .into_iter()
-                    .map(|mut c| {
-                        if remaining == 1 {
-                            if let Some(d) = c.players[current].dwarfs.iter_mut()
-                                .find(|d| d.placed_on == Some(space))
-                            {
-                                if d.weapon > 0 { d.weapon = d.weapon.saturating_add(1); }
-                            }
-                            match c.next_placement_player() {
-                                Some(p) => { c.phase = Phase::Placement; c.current_player = p; }
-                                None    => { c.phase = Phase::Trading;   c.current_player = 0; }
+                    .map(|(mut c, item_bit)| {
+                        let new_used = used_items | item_bit;
+                        if remaining_picks == 1 {
+                            if remaining_adventures == 1 {
+                                if let Some(d) = c.players[current].dwarfs.iter_mut()
+                                    .find(|d| d.placed_on == Some(space))
+                                {
+                                    if d.weapon > 0 { d.weapon = d.weapon.saturating_add(1); }
+                                }
+                                match c.next_placement_player() {
+                                    Some(p) => { c.phase = Phase::Placement; c.current_player = p; }
+                                    None    => { c.phase = Phase::Trading;   c.current_player = 0; }
+                                }
+                            } else {
+                                c.phase = Phase::Adventuring { space, remaining_picks: space.picks_per_adventure(), remaining_adventures: remaining_adventures - 1, used_items: 0 };
                             }
                         } else {
-                            c.phase = Phase::Adventuring { space, remaining: remaining - 1 };
+                            c.phase = Phase::Adventuring { space, remaining_picks: remaining_picks - 1, remaining_adventures, used_items: new_used };
                         }
                         c
                     })
