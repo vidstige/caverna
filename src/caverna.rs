@@ -17,9 +17,11 @@ pub enum ActionSpace {
     OreMineConstruction = 11,
     RubyMineConstruction = 12,
     Blacksmithing = 13,
+    OreMining = 14,
+    RubyMining = 15,
 }
 impl ActionSpace {
-    const COUNT: usize = 14;
+    const COUNT: usize = 16;
     const ALL: [ActionSpace; Self::COUNT] = [
         ActionSpace::Logging,
         ActionSpace::WoodGathering,
@@ -35,6 +37,8 @@ impl ActionSpace {
         ActionSpace::OreMineConstruction,
         ActionSpace::RubyMineConstruction,
         ActionSpace::Blacksmithing,
+        ActionSpace::OreMining,
+        ActionSpace::RubyMining,
     ];
 
     fn gain_resources(self, rounds: u32, resources: &mut Resources) {
@@ -54,6 +58,8 @@ impl ActionSpace {
             ActionSpace::Excavation     => resources.stone += 1 + r,
             ActionSpace::SheepFarming        => {}
             ActionSpace::DonkeyFarming       => {}
+            ActionSpace::OreMining  => resources.coal   += 2 + r,
+            ActionSpace::RubyMining => resources.rubies += 1 + r,
             ActionSpace::OreMineConstruction | ActionSpace::RubyMineConstruction
             | ActionSpace::Blacksmithing => {}
         }
@@ -90,7 +96,8 @@ impl ActionSpace {
             ActionSpace::RubyMineConstruction =>
                 vec![TileGroup::Single(Tile::RubyMine)],
             ActionSpace::SheepFarming | ActionSpace::DonkeyFarming
-            | ActionSpace::Blacksmithing => vec![],
+            | ActionSpace::Blacksmithing
+            | ActionSpace::OreMining | ActionSpace::RubyMining => vec![],
             _ => vec![],
         }
     }
@@ -808,6 +815,16 @@ impl GameState for State {
                     space.gain_animals(child.accumulated[space as usize], &mut child.players[current].animals);
                     if space == ActionSpace::StartingPlayer {
                         child.starting_player = current as u8;
+                    }
+                    if space == ActionSpace::OreMining {
+                        let mines = child.players[current].tiles.iter().flatten()
+                            .filter(|&&t| t == Tile::OreMine).count();
+                        child.players[current].resources.coal += mines * 2;
+                    }
+                    if space == ActionSpace::RubyMining {
+                        let has_mine = child.players[current].tiles.iter().flatten()
+                            .any(|&t| t == Tile::RubyMine);
+                        if has_mine { child.players[current].resources.rubies += 1; }
                     }
 
                     let next = child.next_placement_player();
