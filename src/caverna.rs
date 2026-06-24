@@ -15,9 +15,10 @@ pub enum ActionSpace {
     SheepFarming = 9,
     DonkeyFarming = 10,
     OreMineConstruction = 11,
+    RubyMineConstruction = 12,
 }
 impl ActionSpace {
-    const COUNT: usize = 12;
+    const COUNT: usize = 13;
     const ALL: [ActionSpace; Self::COUNT] = [
         ActionSpace::Logging,
         ActionSpace::WoodGathering,
@@ -31,6 +32,7 @@ impl ActionSpace {
         ActionSpace::SheepFarming,
         ActionSpace::DonkeyFarming,
         ActionSpace::OreMineConstruction,
+        ActionSpace::RubyMineConstruction,
     ];
 
     fn gain_resources(self, rounds: u32, resources: &mut Resources) {
@@ -50,7 +52,7 @@ impl ActionSpace {
             ActionSpace::Excavation     => resources.stone += 1 + r,
             ActionSpace::SheepFarming        => {}
             ActionSpace::DonkeyFarming       => {}
-            ActionSpace::OreMineConstruction => {}
+            ActionSpace::OreMineConstruction | ActionSpace::RubyMineConstruction => {}
         }
     }
     fn gain_animals(self, accumulated: u32, animals: &mut Animals) {
@@ -70,7 +72,9 @@ impl ActionSpace {
             ActionSpace::Excavation =>
                 vec![TileToPlace::Twin((Tile::Tunnel, Tile::Cave)), TileToPlace::Twin((Tile::Cave, Tile::Cave))],
             ActionSpace::OreMineConstruction =>
-                vec![TileToPlace::Twin((Tile::Tunnel, Tile::OreMine))],
+                vec![TileToPlace::Twin((Tile::OreTunnel, Tile::OreMine))],
+            ActionSpace::RubyMineConstruction =>
+                vec![TileToPlace::Single(Tile::RubyMine)],
             ActionSpace::SheepFarming | ActionSpace::DonkeyFarming => vec![],
             _ => vec![],
         }
@@ -99,7 +103,9 @@ enum Tile {
     // Indoor
     Mountain,
     Tunnel,
+    OreTunnel,
     OreMine,
+    RubyMine,
     Cave,
     Dwelling,
 }
@@ -110,7 +116,7 @@ impl Tile {
             Tile::Meadow | Tile::MeadowStable
             | Tile::Pasture | Tile::PastureStable
             | Tile::Field(_) => Tile::Forest,
-            Tile::Tunnel | Tile::OreMine | Tile::Cave | Tile::Dwelling => Tile::Mountain,
+            Tile::Tunnel | Tile::OreTunnel | Tile::OreMine | Tile::RubyMine | Tile::Cave | Tile::Dwelling => Tile::Mountain,
             Tile::Forest | Tile::ForestStable | Tile::Mountain => self,
         }
     }
