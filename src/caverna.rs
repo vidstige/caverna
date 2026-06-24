@@ -734,6 +734,12 @@ impl State {
     }
 
     fn blacksmith_options(&self, player_idx: usize) -> Vec<Self> {
+        let dwarf = self.players[player_idx].dwarfs.iter()
+            .find(|d| d.placed_on == Some(ActionSpace::Blacksmithing))
+            .expect("no dwarf on Blacksmithing");
+        if dwarf.weapon != 0 {
+            return vec![];
+        }
         let coal = self.players[player_idx].resources.coal;
         (1..=coal.min(8)).map(|strength| {
             let mut c = self.clone();
