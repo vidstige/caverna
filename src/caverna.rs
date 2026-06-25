@@ -53,7 +53,7 @@ impl ActionSpace {
         ActionSpace::FamilyLife,
     ];
 
-    fn picks_per_adventure(self) -> usize {
+    fn picks_per_expedition(self) -> usize {
         match self {
             ActionSpace::Logging => 1,
             ActionSpace::OreMineConstruction => 2,
@@ -63,7 +63,7 @@ impl ActionSpace {
         }
     }
 
-    fn adventure_count(self) -> usize {
+    fn expedition_count(self) -> usize {
         match self {
             ActionSpace::Logging | ActionSpace::OreMineConstruction | ActionSpace::Blacksmithing => 1,
             ActionSpace::Adventure => 2,
@@ -583,7 +583,7 @@ impl Player {
 #[derive(Clone, PartialEq)]
 enum Phase {
     Placement,
-    Adventuring { space: ActionSpace, remaining_picks: usize, remaining_adventures: usize, used_items: u16 },
+    Expedition { space: ActionSpace, remaining_picks: usize, remaining_expeditions: usize, used_items: u16 },
     Trading,
 }
 
@@ -690,11 +690,11 @@ impl State {
                     self.current_player, derived
                 );
             }
-            Phase::Adventuring { space, remaining_picks, .. } => {
-                assert!(remaining_picks >= 1, "Adventuring remaining_picks must be >= 1");
+            Phase::Expedition { space, remaining_picks, .. } => {
+                assert!(remaining_picks >= 1, "Expedition remaining_picks must be >= 1");
                 assert!(
                     self.players[self.current_player].dwarfs.iter().any(|d| d.placed_on == Some(space)),
-                    "current player has no dwarf on {:?} during Adventuring", space as usize
+                    "current player has no dwarf on {:?} during Expedition", space as usize
                 );
             }
             Phase::Trading => {
@@ -780,7 +780,7 @@ impl State {
         results
     }
 
-    fn adventure_options(&self, player_idx: usize, weapon: u8, used_items: u16) -> Vec<(Self, u16)> {
+    fn expedition_options(&self, player_idx: usize, weapon: u8, used_items: u16) -> Vec<(Self, u16)> {
         if weapon == 0 {
             return vec![(self.clone(), 0)];
         }
@@ -1061,11 +1061,11 @@ impl GameState for State {
                             .collect();
                     }
 
-                    let adventures = space.adventure_count();
+                    let expeditions = space.expedition_count();
 
                     for c in &mut candidates {
-                        if adventures > 0 {
-                            c.phase = Phase::Adventuring { space, remaining_picks: space.picks_per_adventure(), remaining_adventures: adventures, used_items: 0 };
+                        if expeditions > 0 {
+                            c.phase = Phase::Expedition { space, remaining_picks: space.picks_per_expedition(), remaining_expeditions: expeditions, used_items: 0 };
                         } else {
                             match next {
                                 Some(p) => c.current_player = p,
@@ -1079,17 +1079,17 @@ impl GameState for State {
                 children
             }
 
-            Phase::Adventuring { space, remaining_picks, remaining_adventures, used_items } => {
+            Phase::Expedition { space, remaining_picks, remaining_expeditions, used_items } => {
                 let weapon = self.players[current].dwarfs.iter()
                     .find(|d| d.placed_on == Some(space))
                     .map(|d| d.weapon)
                     .unwrap_or(0);
-                self.adventure_options(current, weapon, used_items)
+                self.expedition_options(current, weapon, used_items)
                     .into_iter()
                     .map(|(mut c, item_bit)| {
                         let new_used = used_items | item_bit;
                         if remaining_picks == 1 {
-                            if remaining_adventures == 1 {
+                            if remaining_expeditions == 1 {
                                 if let Some(d) = c.players[current].dwarfs.iter_mut()
                                     .find(|d| d.placed_on == Some(space))
                                 {
@@ -1100,10 +1100,10 @@ impl GameState for State {
                                     None    => { c.phase = Phase::Trading;   c.current_player = 0; }
                                 }
                             } else {
-                                c.phase = Phase::Adventuring { space, remaining_picks: space.picks_per_adventure(), remaining_adventures: remaining_adventures - 1, used_items: 0 };
+                                c.phase = Phase::Expedition { space, remaining_picks: space.picks_per_expedition(), remaining_expeditions: remaining_expeditions - 1, used_items: 0 };
                             }
                         } else {
-                            c.phase = Phase::Adventuring { space, remaining_picks: remaining_picks - 1, remaining_adventures, used_items: new_used };
+                            c.phase = Phase::Expedition { space, remaining_picks: remaining_picks - 1, remaining_expeditions, used_items: new_used };
                         }
                         c
                     })
