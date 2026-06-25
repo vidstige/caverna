@@ -623,10 +623,16 @@ impl State {
             }
         }
     }
+    fn space_available(&self, space: ActionSpace) -> bool {
+        (space as usize) <= 12 + self.round as usize
+    }
+
     fn replenish(&mut self) {
-        for i in 0..ActionSpace::COUNT {
+        for &space in &ActionSpace::ALL {
+            if !self.space_available(space) { continue; }
+            let i = space as usize;
             let taken = self.players.iter()
-                .any(|p| p.dwarfs.iter().any(|d| d.placed_on.map(|s| s as usize) == Some(i)));
+                .any(|p| p.dwarfs.iter().any(|d| d.placed_on == Some(space)));
             if taken {
                 self.accumulated[i] = 0;
             } else {
@@ -927,6 +933,7 @@ impl GameState for State {
             Phase::Placement => {
                 let mut children = vec![];
                 for &space in &ActionSpace::ALL {
+                    if !self.space_available(space) { continue; }
                     let occupied = self.players.iter()
                         .any(|p| p.dwarfs.iter().any(|d| d.placed_on == Some(space)));
                     if occupied { continue; }
