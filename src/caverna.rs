@@ -283,14 +283,15 @@ impl Tile {
     fn can_place_on(self, other: Tile) -> bool {
         matches!((self, other),
             (Tile::Meadow | Tile::MeadowStable | Tile::Pasture | Tile::PastureStable | Tile::Field(_), Tile::Forest)
-            | (Tile::Tunnel | Tile::Cave | Tile::RubyMine, Tile::Mountain)
+            | (Tile::Tunnel | Tile::Cave, Tile::Mountain)
             | (Tile::OreTunnel | Tile::OreMine, Tile::Tunnel)
+            | (Tile::RubyMine, Tile::Tunnel | Tile::OreTunnel)
             | (Tile::Dwelling, Tile::Cave)
         )
     }
 
     fn requires_adjacency(self) -> bool {
-        !matches!(self, Tile::OreTunnel | Tile::OreMine | Tile::Dwelling)
+        !matches!(self, Tile::OreTunnel | Tile::OreMine | Tile::RubyMine | Tile::Dwelling)
     }
 
     fn is_fenceable(self) -> bool {
