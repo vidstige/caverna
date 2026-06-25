@@ -341,7 +341,7 @@ impl Player {
     }
 
     pub fn food_needed(&self) -> usize {
-        self.dwarfs.len() + self.children
+        self.dwarfs.len() * 2 + self.children
     }
 
     pub fn dwellings_needed(&self) -> usize {
