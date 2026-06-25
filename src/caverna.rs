@@ -591,34 +591,6 @@ impl Player {
         self.animals = self.trim_animals(bred);
     }
 
-    fn verify_pastures(&self) {
-        let mut seen: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
-        for (i, pasture) in self.pastures.iter().enumerate() {
-            assert!(!pasture.cells.is_empty(), "pasture {i} has no cells");
-
-            for &(x, y) in &pasture.cells {
-                assert!(
-                    matches!(self.outdoor[y][x], Tile::Pasture | Tile::PastureStable),
-                    "pasture {i} cell ({x},{y}) is not a pasture tile"
-                );
-                assert!(seen.insert((x, y)), "cell ({x},{y}) appears in multiple pastures");
-            }
-
-            // All cells must form a single connected component
-            let cell_set: std::collections::HashSet<_> = pasture.cells.iter().copied().collect();
-            let mut visited: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
-            let mut stack = vec![pasture.cells[0]];
-            while let Some((x, y)) = stack.pop() {
-                if !visited.insert((x, y)) { continue; }
-                for (nx, ny) in adjacents(x, y) {
-                    if cell_set.contains(&(nx, ny)) {
-                        stack.push((nx, ny));
-                    }
-                }
-            }
-            assert_eq!(visited.len(), pasture.cells.len(), "pasture {i} cells are not all connected");
-        }
-    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -703,59 +675,7 @@ impl State {
         None
     }
 
-    // Used only by verify() — re-derives current_player from dwarf state.
-    fn derive_current_player(&self) -> usize {
-        let n = self.players.len();
-        let placed: Vec<usize> = self.players.iter()
-            .map(|p| p.dwarfs.iter().filter(|d| d.placed_on.is_some()).count())
-            .collect();
-        let total_placed: usize = placed.iter().sum();
-        let total_dwarves: Vec<usize> = self.players.iter().map(|p| p.dwarfs.len()).collect();
-        let mut turns = 0;
-        let mut seat = self.starting_player as usize;
-        let max_iter = total_dwarves.iter().sum::<usize>() * n + 1;
-        for _ in 0..max_iter {
-            if placed[seat] < total_dwarves[seat] {
-                if turns == total_placed { return seat; }
-                turns += 1;
-            }
-            seat = (seat + 1) % n;
-        }
-        self.starting_player as usize
-    }
 
-    pub fn verify(&self) {
-        match self.phase {
-            Phase::Placement => {
-                let derived = self.derive_current_player();
-                assert_eq!(
-                    self.current_player, derived,
-                    "current_player mismatch: explicit={}, derived={}",
-                    self.current_player, derived
-                );
-            }
-            Phase::Expedition { space, remaining_picks, .. } => {
-                assert!(remaining_picks >= 1, "Expedition remaining_picks must be >= 1");
-                assert!(
-                    self.players[self.current_player].dwarfs.iter().any(|d| d.placed_on == Some(space)),
-                    "current player has no dwarf on {:?} during Expedition", space as usize
-                );
-            }
-            Phase::Trading => {
-                assert!(
-                    self.players.iter().all(|p| p.dwarfs.iter().all(|d| d.placed_on.is_some())),
-                    "not all dwarves placed during Trading phase"
-                );
-                assert!(
-                    self.current_player < self.players.len(),
-                    "current_player {} out of range", self.current_player
-                );
-            }
-        }
-        for player in &self.players {
-            player.verify_pastures();
-        }
-    }
     fn pasture_options(&self, player_idx: usize) -> Vec<Self> {
         let player = &self.players[player_idx];
         let mut results = vec![self.clone()];
