@@ -109,7 +109,7 @@ impl ActionSpace {
         match self {
             ActionSpace::OreMineConstruction => resources.coal += 3,
             ActionSpace::RubyMineConstruction => {
-                if matches!(replaced, TileGroup::Single(Tile::OreTunnel)) {
+                if matches!(replaced, TileGroup::Single(Tile::DeepTunnel)) {
                     resources.rubies += 1;
                 }
             }
@@ -125,7 +125,7 @@ impl ActionSpace {
             ActionSpace::Excavation =>
                 vec![TileGroup::Twin((Tile::Tunnel, Tile::Cave)), TileGroup::Twin((Tile::Cave, Tile::Cave))],
             ActionSpace::OreMineConstruction =>
-                vec![TileGroup::Twin((Tile::OreTunnel, Tile::OreMine))],
+                vec![TileGroup::Twin((Tile::DeepTunnel, Tile::OreMine))],
             ActionSpace::RubyMineConstruction =>
                 vec![TileGroup::Single(Tile::RubyMine)],
             ActionSpace::SheepFarming | ActionSpace::DonkeyFarming
@@ -262,7 +262,7 @@ pub(crate) enum Tile {
     // Indoor
     Mountain,
     Tunnel,
-    OreTunnel,
+    DeepTunnel,
     OreMine,
     RubyMine,
     Cave,
@@ -284,14 +284,14 @@ impl Tile {
         matches!((self, other),
             (Tile::Meadow | Tile::MeadowStable | Tile::Pasture | Tile::PastureStable | Tile::Field(_), Tile::Forest)
             | (Tile::Tunnel | Tile::Cave, Tile::Mountain)
-            | (Tile::OreTunnel | Tile::OreMine, Tile::Tunnel)
-            | (Tile::RubyMine, Tile::Tunnel | Tile::OreTunnel)
+            | (Tile::DeepTunnel | Tile::OreMine, Tile::Tunnel)
+            | (Tile::RubyMine, Tile::Tunnel | Tile::DeepTunnel)
             | (Tile::Dwelling, Tile::Cave)
         )
     }
 
     fn requires_adjacency(self) -> bool {
-        !matches!(self, Tile::OreTunnel | Tile::OreMine | Tile::RubyMine | Tile::Dwelling)
+        !matches!(self, Tile::DeepTunnel | Tile::OreMine | Tile::RubyMine | Tile::Dwelling)
     }
 
     fn is_fenceable(self) -> bool {

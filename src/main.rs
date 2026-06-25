@@ -138,7 +138,7 @@ fn tile_symbol(tile: Tile) -> &'static str {
         Tile::Field(_)      => "Fv",
         Tile::Mountain  => "~~",
         Tile::Tunnel    => "Tu",
-        Tile::OreTunnel => "Ot",
+        Tile::DeepTunnel => "Dt",
         Tile::OreMine   => "Om",
         Tile::RubyMine  => "Rm",
         Tile::Cave      => "Cv",
