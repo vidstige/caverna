@@ -23,9 +23,11 @@ pub enum ActionSpace {
     RubyDelivery = 17,
     Adventure = 18,
     Housework = 19,
+    WishForChildren = 20,
+    FamilyLife = 21,
 }
 impl ActionSpace {
-    const COUNT: usize = 20;
+    const COUNT: usize = 22;
     const ALL: [ActionSpace; Self::COUNT] = [
         ActionSpace::Logging,
         ActionSpace::WoodGathering,
@@ -47,6 +49,8 @@ impl ActionSpace {
         ActionSpace::RubyDelivery,
         ActionSpace::Adventure,
         ActionSpace::Housework,
+        ActionSpace::WishForChildren,
+        ActionSpace::FamilyLife,
     ];
 
     fn picks_per_adventure(self) -> usize {
@@ -89,7 +93,8 @@ impl ActionSpace {
             ActionSpace::OreDelivery => { resources.stone += 1 + r; resources.coal += 1 + r; }
             ActionSpace::RubyDelivery => resources.rubies += 2 + r,
             ActionSpace::OreMineConstruction | ActionSpace::RubyMineConstruction
-            | ActionSpace::Blacksmithing | ActionSpace::Adventure | ActionSpace::Housework => {}
+            | ActionSpace::Blacksmithing | ActionSpace::Adventure | ActionSpace::Housework
+            | ActionSpace::WishForChildren | ActionSpace::FamilyLife => {}
         }
     }
     fn gain_animals(self, accumulated: u32, animals: &mut Animals) {
@@ -235,7 +240,13 @@ struct Furnishing {
     max_count: usize,
 }
 
+// All cave furnishings (used by Housework and Adventure loot)
 const FURNISHINGS: &[Furnishing] = &[
+    Furnishing { tile: Tile::Dwelling, cost_wood: 4, cost_stone: 3, max_count: 16 },
+];
+
+// Only dwelling-type furnishings (used by WishForChildren, which cannot furnish other cave types)
+const DWELLING_FURNISHINGS: &[Furnishing] = &[
     Furnishing { tile: Tile::Dwelling, cost_wood: 4, cost_stone: 3, max_count: 16 },
 ];
 
@@ -299,6 +310,7 @@ struct Pasture {
 #[derive(Clone)]
 pub struct Player {
     pub dwarfs: Vec<Dwarf>,
+    pub children: usize,
     tiles: [[Tile; BOARD_WIDTH]; BOARD_HEIGHT],
     resources: Resources,
     dogs: usize,
@@ -317,6 +329,7 @@ impl Player {
         tiles[2][3] = Tile::Cave;
         let mut player = Player {
             dwarfs: vec![Dwarf { weapon: 0, placed_on: None }, Dwarf { weapon: 0, placed_on: None }],
+            children: 0,
             tiles,
             resources: Resources::zero(),
             dogs: 0,
@@ -325,6 +338,25 @@ impl Player {
         };
         player.resources.food = food;
         player
+    }
+
+    pub fn food_needed(&self) -> usize {
+        self.dwarfs.len() + self.children
+    }
+
+    pub fn dwellings_needed(&self) -> usize {
+        self.dwarfs.len() + self.children
+    }
+
+    fn dwelling_capacity(&self) -> usize {
+        self.tiles.iter().flatten().filter(|&&t| t == Tile::Dwelling).count() + 1
+    }
+
+    fn grow_children(&mut self) {
+        for _ in 0..self.children {
+            self.dwarfs.push(Dwarf { placed_on: None, weapon: 0 });
+        }
+        self.children = 0;
     }
 
     fn adjacent_to_developed(&self, x: usize, y: usize, base: Tile) -> bool {
@@ -487,7 +519,7 @@ impl Player {
     }
 
     fn feed(&mut self) {
-        let needed = self.dwarfs.len();
+        let needed = self.food_needed();
         if self.resources.food >= needed {
             self.resources.food -= needed;
         } else {
@@ -607,6 +639,12 @@ impl State {
             player.harvest();
             player.feed();
             player.breed();
+        }
+    }
+
+    fn grow_children(&mut self) {
+        for player in &mut self.players {
+            player.grow_children();
         }
     }
 
@@ -771,7 +809,7 @@ impl State {
         if avail(11) { let mut c = self.clone(); c.players[player_idx].resources.gold += 2; results.push((c, 1u16 << 11)); }
         // Level 7 (indices 13, 14)
         if avail(13) {
-            for c in self.furnish_cave_options(player_idx) {
+            for c in self.furnish_cave_options(player_idx, FURNISHINGS) {
                 results.push((c, 1u16 << 13));
             }
         }
@@ -780,7 +818,7 @@ impl State {
         results
     }
 
-    fn furnish_cave_options(&self, player_idx: usize) -> Vec<Self> {
+    fn furnish_cave_options(&self, player_idx: usize, furnishings: &[Furnishing]) -> Vec<Self> {
         let p = &self.players[player_idx];
         let mut opts = vec![];
         for y in 0..BOARD_HEIGHT {
@@ -788,7 +826,7 @@ impl State {
                 if p.tiles[y][x] != Tile::Cave {
                     continue;
                 }
-                for f in FURNISHINGS {
+                for f in furnishings {
                     if p.resources.wood < f.cost_wood || p.resources.stone < f.cost_stone {
                         continue;
                     }
@@ -808,6 +846,17 @@ impl State {
             }
         }
         opts
+    }
+
+    fn family_growth_option(&self, player_idx: usize) -> Option<Self> {
+        let p = &self.players[player_idx];
+        if p.dwellings_needed() < p.dwelling_capacity() {
+            let mut c = self.clone();
+            c.players[player_idx].children += 1;
+            Some(c)
+        } else {
+            None
+        }
     }
 
     fn forge_options(&self, player_idx: usize, space: ActionSpace) -> Vec<Self> {
@@ -845,6 +894,7 @@ impl State {
                 .collect();
             for veg in subsets_up_to_2(&remaining) {
                 if veg.len() > max_veg { continue; }
+                if wheat.is_empty() && veg.is_empty() { continue; }
                 let mut child = self.clone();
                 child.players[player_idx].resources.wheat -= wheat.len();
                 child.players[player_idx].resources.vegetables -= veg.len();
@@ -976,15 +1026,45 @@ impl GameState for State {
                         }
                         candidates = candidates.into_iter()
                             .flat_map(|c| {
-                                let opts = c.furnish_cave_options(current);
+                                let opts = c.furnish_cave_options(current, FURNISHINGS);
                                 if opts.is_empty() { vec![c] } else { opts }
+                            })
+                            .collect();
+                    }
+
+                    if space == ActionSpace::WishForChildren {
+                        candidates = candidates.into_iter()
+                            .flat_map(|c| {
+                                let mut opts = vec![];
+                                if let Some(grown) = c.family_growth_option(current) {
+                                    opts.push(grown);
+                                }
+                                opts.extend(c.furnish_cave_options(current, DWELLING_FURNISHINGS));
+                                opts
+                            })
+                            .collect();
+                    }
+
+                    if space == ActionSpace::FamilyLife {
+                        candidates = candidates.into_iter()
+                            .flat_map(|c| {
+                                let mut opts: Vec<Self> = vec![];
+                                if let Some(grown) = c.family_growth_option(current) {
+                                    opts.push(grown.clone()); // grow only
+                                    opts.extend(grown.sow_options(current)); // grow + sow
+                                }
+                                opts.extend(c.sow_options(current)); // sow only (empty if nothing to sow)
+                                opts
                             })
                             .collect();
                     }
 
                     if space == ActionSpace::SlashAndBurn {
                         candidates = candidates.into_iter()
-                            .flat_map(|c| c.sow_options(current))
+                            .flat_map(|c| {
+                                let sow = c.sow_options(current);
+                                if sow.is_empty() { vec![c] } else { sow }
+                            })
                             .collect();
                     }
 
@@ -1045,7 +1125,7 @@ impl GameState for State {
             }
 
             Phase::Trading => {
-                let food_needed = self.players[current].dwarfs.len();
+                let food_needed = self.players[current].food_needed();
                 let mut children = vec![];
 
                 // "Done trading" — advance to next player or execute harvest
@@ -1056,6 +1136,7 @@ impl GameState for State {
                     done.replenish();
                     done.return_dwarfs();
                     done.harvest();
+                    done.grow_children();
                     done.round += 1;
                     done.current_player = done.starting_player as usize;
                     done.phase = Phase::Placement;
