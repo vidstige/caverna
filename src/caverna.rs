@@ -137,10 +137,10 @@ impl ActionSpace {
     }
 }
 
-const HALF_WIDTH: usize = 3;
-const BOARD_HEIGHT: usize = 4;
+pub(crate) const HALF_WIDTH: usize = 3;
+pub(crate) const BOARD_HEIGHT: usize = 4;
 
-type Board = [[Tile; HALF_WIDTH]; BOARD_HEIGHT];
+pub(crate) type Board = [[Tile; HALF_WIDTH]; BOARD_HEIGHT];
 
 #[derive(Clone, Copy)]
 enum Side { Outdoor, Indoor }
@@ -250,7 +250,7 @@ fn tile_placements_on(board: &Board, tile: TileGroup) -> Vec<Board> {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum Tile {
+pub(crate) enum Tile {
     // Outdoor
     Forest,
     ForestStable,                     // stable on uncleared forest — 1 boar
@@ -398,8 +398,8 @@ struct Pasture {
 pub struct Player {
     pub dwarfs: Vec<Dwarf>,
     pub children: usize,
-    outdoor: Board,
-    indoor: Board,
+    pub(crate) outdoor: Board,
+    pub(crate) indoor: Board,
     pub(crate) resources: Resources,
     pub(crate) dogs: usize,
     pub(crate) animals: Animals, // indexed by AnimalType

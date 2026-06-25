@@ -4,7 +4,7 @@ mod mcts;
 mod test_caverna;
 
 use crate::{
-    caverna::{ActionSpace, Phase, Resources, State},
+    caverna::{ActionSpace, Phase, Player, Resources, State, Tile, BOARD_HEIGHT},
     mcts::{random_move, search, GameState},
 };
 use rand::SeedableRng;
@@ -125,6 +125,51 @@ fn describe_move(state: &State, next: &State) -> String {
     }
 }
 
+fn tile_symbol(tile: Tile) -> &'static str {
+    match tile {
+        Tile::Forest        => "..",
+        Tile::ForestStable  => ".s",
+        Tile::Meadow        => "Me",
+        Tile::MeadowStable  => "Ms",
+        Tile::Pasture       => "Pa",
+        Tile::PastureStable => "Ps",
+        Tile::Field((0, 0)) => "Fd",
+        Tile::Field((w, _)) if w > 0 => "Fw",
+        Tile::Field(_)      => "Fv",
+        Tile::Mountain  => "~~",
+        Tile::Tunnel    => "Tu",
+        Tile::OreTunnel => "Ot",
+        Tile::OreMine   => "Om",
+        Tile::RubyMine  => "Rm",
+        Tile::Cave      => "Cv",
+        Tile::Dwelling  => "Dw",
+    }
+}
+
+fn print_player_state(player: &Player) {
+    for y in 0..BOARD_HEIGHT {
+        let out: String = player.outdoor[y].iter().map(|&t| tile_symbol(t)).collect::<Vec<_>>().join(" ");
+        let ind: String = player.indoor[y].iter().map(|&t| tile_symbol(t)).collect::<Vec<_>>().join(" ");
+        println!("    {} | {}", out, ind);
+    }
+    let r = &player.resources;
+    let mut parts: Vec<String> = [
+        (r.wood, "wood"), (r.stone, "stone"), (r.coal, "coal"), (r.rubies, "ruby"),
+        (r.food, "food"), (r.wheat, "wheat"), (r.vegetables, "veg"), (r.gold, "gold"),
+    ].iter()
+     .filter(|(n, _)| *n > 0)
+     .map(|(n, name)| format!("{} {}", n, name))
+     .collect();
+    player.animals.iter()
+        .zip(["cow", "boar", "donkey", "sheep"])
+        .filter(|(&n, _)| n > 0)
+        .for_each(|(n, name)| parts.push(format!("{} {}", n, name)));
+    if player.dogs > 0 { parts.push(format!("{} dog", player.dogs)); }
+    if !parts.is_empty() {
+        println!("    {}", parts.join(", "));
+    }
+}
+
 fn main() {
     let mut seed: Option<u64> = None;
     let mut mcts_iter: usize = 1000;
@@ -155,12 +200,14 @@ fn main() {
             round = state.round;
             println!("=== Round {} ===", round + 1);
         }
-        let next = if state.current_player() == 0 {
+        let current = state.current_player();
+        let next = if current == 0 {
             search(&state, &mut rng, mcts_iter).unwrap()
         } else {
             random_move(&state, &mut rng)
         };
-        println!("  {}: {}", names[state.current_player()], describe_move(&state, &next));
+        println!("  {}: {}", names[current], describe_move(&state, &next));
+        print_player_state(&next.players[current]);
         state = next;
     }
     for (index, player) in state.players.iter().enumerate() {
