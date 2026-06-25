@@ -880,28 +880,24 @@ impl State {
 
     fn sow_options(&self, player_idx: usize) -> Vec<Self> {
         let player = &self.players[player_idx];
-        let empty: Vec<(usize, usize)> = (0..BOARD_HEIGHT)
+        let fields: Vec<(usize, usize)> = (0..BOARD_HEIGHT)
             .flat_map(|y| (0..BOARD_WIDTH).map(move |x| (x, y)))
             .filter(|&(x, y)| player.tiles[y][x] == Tile::Field((0, 0)))
             .collect();
         let max_wheat = player.resources.wheat.min(2);
         let max_veg = player.resources.vegetables.min(2);
         let mut results = vec![];
-        for wheat in subsets_up_to_2(&empty) {
-            if wheat.len() > max_wheat { continue; }
-            let remaining: Vec<_> = empty.iter().copied()
-                .filter(|s| !wheat.contains(s))
-                .collect();
-            for veg in subsets_up_to_2(&remaining) {
-                if veg.len() > max_veg { continue; }
-                if wheat.is_empty() && veg.is_empty() { continue; }
+        for w in 0..=max_wheat {
+            for v in 0..=max_veg {
+                if w == 0 && v == 0 { continue; }
+                if w + v > fields.len() { continue; }
                 let mut child = self.clone();
-                child.players[player_idx].resources.wheat -= wheat.len();
-                child.players[player_idx].resources.vegetables -= veg.len();
-                for &(x, y) in &wheat {
+                child.players[player_idx].resources.wheat -= w;
+                child.players[player_idx].resources.vegetables -= v;
+                for &(x, y) in &fields[..w] {
                     child.players[player_idx].tiles[y][x] = Tile::Field((3, 0));
                 }
-                for &(x, y) in &veg {
+                for &(x, y) in &fields[w..w + v] {
                     child.players[player_idx].tiles[y][x] = Tile::Field((0, 2));
                 }
                 results.push(child);
@@ -909,17 +905,6 @@ impl State {
         }
         results
     }
-}
-
-fn subsets_up_to_2(items: &[(usize, usize)]) -> Vec<Vec<(usize, usize)>> {
-    let mut result = vec![vec![]];
-    for i in 0..items.len() {
-        result.push(vec![items[i]]);
-        for j in (i + 1)..items.len() {
-            result.push(vec![items[i], items[j]]);
-        }
-    }
-    result
 }
 
 impl GameState for State {
