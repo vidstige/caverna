@@ -274,9 +274,10 @@ impl Tile {
         matches!(self, Tile::Forest | Tile::Mountain)
     }
 
-    fn is_outdoor(self) -> bool {
-        matches!(self, Tile::Forest | Tile::ForestStable | Tile::Meadow | Tile::MeadowStable
+    fn side(self) -> Side {
+        if matches!(self, Tile::Forest | Tile::ForestStable | Tile::Meadow | Tile::MeadowStable
             | Tile::Pasture | Tile::PastureStable | Tile::Field(_))
+        { Side::Outdoor } else { Side::Indoor }
     }
 
     fn can_place_on(self, other: Tile) -> bool {
@@ -339,12 +340,6 @@ enum TileGroup {
     Twin((Tile, Tile)),
 }
 
-impl TileGroup {
-    fn side(&self) -> Side {
-        let t = match self { TileGroup::Single(t) => *t, TileGroup::Twin((t, _)) => *t };
-        if t.is_outdoor() { Side::Outdoor } else { Side::Indoor }
-    }
-}
 
 #[derive(Clone)]
 pub struct Dwarf {
@@ -449,7 +444,8 @@ impl Player {
     }
 
     fn tile_placements(&self, tile: TileGroup) -> Vec<(Side, Board)> {
-        match tile.side() {
+        let first = match tile { TileGroup::Single(t) => t, TileGroup::Twin((t, _)) => t };
+        match first.side() {
             Side::Outdoor => tile_placements_on(&self.outdoor, tile).into_iter().map(|b| (Side::Outdoor, b)).collect(),
             Side::Indoor  => tile_placements_on(&self.indoor,  tile).into_iter().map(|b| (Side::Indoor,  b)).collect(),
         }
