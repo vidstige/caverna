@@ -137,16 +137,21 @@ impl ActionSpace {
     }
 }
 
-const BOARD_WIDTH: usize = 6;
+const HALF_WIDTH: usize = 3;
 const BOARD_HEIGHT: usize = 4;
 
-fn changed_cells(old: &[[Tile; BOARD_WIDTH]; BOARD_HEIGHT], new: &[[Tile; BOARD_WIDTH]; BOARD_HEIGHT]) -> Vec<(usize, usize)> {
-    (0..BOARD_HEIGHT).flat_map(|y| (0..BOARD_WIDTH).map(move |x| (x, y)))
+type Board = [[Tile; HALF_WIDTH]; BOARD_HEIGHT];
+
+#[derive(Clone, Copy)]
+enum Side { Outdoor, Indoor }
+
+fn changed_cells(old: &Board, new: &Board) -> Vec<(usize, usize)> {
+    (0..BOARD_HEIGHT).flat_map(|y| (0..HALF_WIDTH).map(move |x| (x, y)))
         .filter(|&(x, y)| old[y][x] != new[y][x])
         .collect()
 }
 
-fn board_delta(old: &[[Tile; BOARD_WIDTH]; BOARD_HEIGHT], new: &[[Tile; BOARD_WIDTH]; BOARD_HEIGHT]) -> TileGroup {
+fn board_delta(old: &Board, new: &Board) -> TileGroup {
     let replaced: Vec<Tile> = changed_cells(old, new).into_iter()
         .map(|(x, y)| old[y][x])
         .collect();
@@ -157,20 +162,30 @@ fn board_delta(old: &[[Tile; BOARD_WIDTH]; BOARD_HEIGHT], new: &[[Tile; BOARD_WI
     }
 }
 
-fn apply_location_bonus((x, y): (usize, usize), resources: &mut Resources, animals: &mut Animals) {
+fn apply_outdoor_location_bonus((x, y): (usize, usize), resources: &mut Resources, animals: &mut Animals) {
     match (x, y) {
         (0, 2) | (2, 0) => animals[AnimalType::Boar as usize] += 1,
         (1, 3)          => resources.food += 1,
-        (5, 0)          => resources.food += 2,
-        (4, 3)          => resources.food += 1,
         _               => {}
+    }
+}
+
+fn apply_indoor_location_bonus((x, y): (usize, usize), resources: &mut Resources, _animals: &mut Animals) {
+    match (x, y) {
+        (2, 0) => resources.food += 2,
+        (1, 3) => resources.food += 1,
+        _      => {}
     }
 }
 
 fn adjacents(x: usize, y: usize) -> impl Iterator<Item = (usize, usize)> {
     [(x.wrapping_sub(1), y), (x + 1, y), (x, y.wrapping_sub(1)), (x, y + 1)]
         .into_iter()
-        .filter(|&(nx, ny)| nx < BOARD_WIDTH && ny < BOARD_HEIGHT)
+        .filter(|&(nx, ny)| nx < HALF_WIDTH && ny < BOARD_HEIGHT)
+}
+
+fn adjacent_to_developed(board: &Board, x: usize, y: usize) -> bool {
+    adjacents(x, y).any(|(nx, ny)| !board[ny][nx].is_undeveloped())
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -199,13 +214,15 @@ impl Tile {
             Tile::Meadow | Tile::MeadowStable
             | Tile::Pasture | Tile::PastureStable
             | Tile::Field(_) => Tile::Forest,
-            Tile::Tunnel | Tile::OreTunnel | Tile::OreMine | Tile::RubyMine | Tile::Cave | Tile::Dwelling => Tile::Mountain,
+            Tile::Tunnel | Tile::Cave | Tile::Dwelling => Tile::Mountain,
+            Tile::OreTunnel | Tile::OreMine => Tile::Tunnel,
+            Tile::RubyMine => Tile::Mountain,
             Tile::Forest | Tile::ForestStable | Tile::Mountain => self,
         }
     }
 
     fn is_undeveloped(self) -> bool {
-        self == self.base()
+        matches!(self, Tile::Forest | Tile::Mountain)
     }
 
     fn is_fenceable(self) -> bool {
@@ -253,6 +270,13 @@ const DWELLING_FURNISHINGS: &[Furnishing] = &[
 enum TileGroup {
     Single(Tile),
     Twin((Tile, Tile)),
+}
+
+impl TileGroup {
+    fn side(&self) -> Side {
+        let t = match self { TileGroup::Single(t) => *t, TileGroup::Twin((t, _)) => *t };
+        if matches!(t.base(), Tile::Forest) { Side::Outdoor } else { Side::Indoor }
+    }
 }
 
 #[derive(Clone)]
@@ -311,7 +335,8 @@ struct Pasture {
 pub struct Player {
     pub dwarfs: Vec<Dwarf>,
     pub children: usize,
-    tiles: [[Tile; BOARD_WIDTH]; BOARD_HEIGHT],
+    outdoor: Board,
+    indoor: Board,
     pub(crate) resources: Resources,
     pub(crate) dogs: usize,
     pub(crate) animals: Animals, // indexed by AnimalType
@@ -319,18 +344,15 @@ pub struct Player {
 }
 impl Player {
     fn new(food: usize) -> Self {
-        let mut tiles = [[Tile::Mountain; BOARD_WIDTH]; BOARD_HEIGHT];
-        for row in tiles.iter_mut() {
-            for x in 0..3 {
-                row[x] = Tile::Forest;
-            }
-        }
-        tiles[3][3] = Tile::Dwelling;
-        tiles[2][3] = Tile::Cave;
+        let outdoor = [[Tile::Forest; HALF_WIDTH]; BOARD_HEIGHT];
+        let mut indoor = [[Tile::Mountain; HALF_WIDTH]; BOARD_HEIGHT];
+        indoor[3][0] = Tile::Dwelling;
+        indoor[2][0] = Tile::Cave;
         let mut player = Player {
             dwarfs: vec![Dwarf { weapon: 0, placed_on: None }, Dwarf { weapon: 0, placed_on: None }],
             children: 0,
-            tiles,
+            outdoor,
+            indoor,
             resources: Resources::zero(),
             dogs: 0,
             animals: [0; 4],
@@ -349,7 +371,7 @@ impl Player {
     }
 
     fn dwelling_capacity(&self) -> usize {
-        self.tiles.iter().flatten().filter(|&&t| t == Tile::Dwelling).count() + 1
+        self.indoor.iter().flatten().filter(|&&t| t == Tile::Dwelling).count() + 1
     }
 
     fn grow_children(&mut self) {
@@ -359,23 +381,16 @@ impl Player {
         self.children = 0;
     }
 
-    fn adjacent_to_developed(&self, x: usize, y: usize, base: Tile) -> bool {
-        adjacents(x, y).any(|(nx, ny)| {
-            let t = self.tiles[ny][nx];
-            !t.is_undeveloped() && t.base() == base
-        })
-    }
-
-    fn tile_placements(&self, tile: TileGroup) -> Vec<[[Tile; BOARD_WIDTH]; BOARD_HEIGHT]> {
+    fn outdoor_tile_placements(&self, tile: TileGroup) -> Vec<Board> {
         let mut result = vec![];
         match tile {
             TileGroup::Single(t) => {
                 let base = t.base();
                 for y in 0..BOARD_HEIGHT {
-                    for x in 0..BOARD_WIDTH {
-                        if self.tiles[y][x] != base { continue; }
-                        if self.adjacent_to_developed(x, y, base) {
-                            let mut board = self.tiles;
+                    for x in 0..HALF_WIDTH {
+                        if self.outdoor[y][x] != base { continue; }
+                        if adjacent_to_developed(&self.outdoor, x, y) {
+                            let mut board = self.outdoor;
                             board[y][x] = t;
                             result.push(board);
                         }
@@ -384,24 +399,23 @@ impl Player {
             }
             TileGroup::Twin((t1, t2)) => {
                 let base = t1.base();
-                let outdoor_first = base == Tile::Forest
-                    && self.tiles.iter().flatten().all(|t| t.is_undeveloped());
+                let all_undeveloped = self.outdoor.iter().flatten().all(|t| t.is_undeveloped());
                 for y in 0..BOARD_HEIGHT {
-                    for x in 0..BOARD_WIDTH {
+                    for x in 0..HALF_WIDTH {
                         for (x2, y2) in [(x + 1, y), (x, y + 1)] {
-                            if x2 >= BOARD_WIDTH || y2 >= BOARD_HEIGHT { continue; }
-                            if self.tiles[y][x] != base || self.tiles[y2][x2] != base { continue; }
-                            let valid = if outdoor_first {
+                            if x2 >= HALF_WIDTH || y2 >= BOARD_HEIGHT { continue; }
+                            if self.outdoor[y][x] != base || self.outdoor[y2][x2] != base { continue; }
+                            let valid = if all_undeveloped {
                                 (x == 2 && y == 3) || (x2 == 2 && y2 == 3)
                             } else {
-                                self.adjacent_to_developed(x, y, base) || self.adjacent_to_developed(x2, y2, base)
+                                adjacent_to_developed(&self.outdoor, x, y) || adjacent_to_developed(&self.outdoor, x2, y2)
                             };
                             if valid {
-                                let mut board = self.tiles;
+                                let mut board = self.outdoor;
                                 board[y][x] = t1; board[y2][x2] = t2;
                                 result.push(board);
                                 if t1 != t2 {
-                                    let mut board = self.tiles;
+                                    let mut board = self.outdoor;
                                     board[y][x] = t2; board[y2][x2] = t1;
                                     result.push(board);
                                 }
@@ -413,15 +427,66 @@ impl Player {
         }
         result
     }
+
+    fn indoor_tile_placements(&self, tile: TileGroup) -> Vec<Board> {
+        let mut result = vec![];
+        match tile {
+            TileGroup::Single(t) => {
+                let base = t.base();
+                for y in 0..BOARD_HEIGHT {
+                    for x in 0..HALF_WIDTH {
+                        if self.indoor[y][x] != base { continue; }
+                        if adjacent_to_developed(&self.indoor, x, y) {
+                            let mut board = self.indoor;
+                            board[y][x] = t;
+                            result.push(board);
+                        }
+                    }
+                }
+            }
+            TileGroup::Twin((t1, t2)) => {
+                let base = t1.base();
+                for y in 0..BOARD_HEIGHT {
+                    for x in 0..HALF_WIDTH {
+                        for (x2, y2) in [(x + 1, y), (x, y + 1)] {
+                            if x2 >= HALF_WIDTH || y2 >= BOARD_HEIGHT { continue; }
+                            if self.indoor[y][x] != base || self.indoor[y2][x2] != base { continue; }
+                            let valid = adjacent_to_developed(&self.indoor, x, y)
+                                || adjacent_to_developed(&self.indoor, x2, y2);
+                            if valid {
+                                let mut board = self.indoor;
+                                board[y][x] = t1; board[y2][x2] = t2;
+                                result.push(board);
+                                if t1 != t2 {
+                                    let mut board = self.indoor;
+                                    board[y][x] = t2; board[y2][x2] = t1;
+                                    result.push(board);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    fn tile_placements(&self, tile: TileGroup) -> Vec<(Side, Board)> {
+        match tile.side() {
+            Side::Outdoor => self.outdoor_tile_placements(tile).into_iter().map(|b| (Side::Outdoor, b)).collect(),
+            Side::Indoor  => self.indoor_tile_placements(tile).into_iter().map(|b| (Side::Indoor,  b)).collect(),
+        }
+    }
+
     pub fn points(&self) -> i32 {
         self.dwarfs.len() as i32 +
         self.resources.gold as i32 +
         self.resources.rubies as i32 +
         {
-            let field_wheat: usize = self.tiles.iter().flatten()
+            let field_wheat: usize = self.outdoor.iter().flatten()
                 .filter_map(|&t| if let Tile::Field((w, _)) = t { Some(w as usize) } else { None })
                 .sum();
-            let field_veg: usize = self.tiles.iter().flatten()
+            let field_veg: usize = self.outdoor.iter().flatten()
                 .filter_map(|&t| if let Tile::Field((_, v)) = t { Some(v as usize) } else { None })
                 .sum();
             let wheat = self.resources.wheat + field_wheat;
@@ -432,40 +497,42 @@ impl Player {
         self.animals.iter().sum::<usize>() as i32 +
         {
             // 3 points per dwelling; subtract 3 for the initial unfurnished one
-            let dwellings = self.tiles.iter().flatten().filter(|&&t| t == Tile::Dwelling).count() as i32;
+            let dwellings = self.indoor.iter().flatten().filter(|&&t| t == Tile::Dwelling).count() as i32;
             dwellings * 3 - 3
         } -
-        self.tiles.iter().flatten().map(|&t| t.points()).sum::<i32>() -
+        self.outdoor.iter().flatten().map(|&t| t.points()).sum::<i32>() -
+        self.indoor.iter().flatten().map(|&t| t.points()).sum::<i32>() -
         self.resources.begging as i32 * 3 -
-        self.tiles.iter().flatten().filter(|&&t| t.is_undeveloped()).count() as i32 -
+        self.outdoor.iter().flatten().filter(|&&t| t.is_undeveloped()).count() as i32 -
+        self.indoor.iter().flatten().filter(|&&t| t.is_undeveloped()).count() as i32 -
         self.animals.iter().filter(|&&n| n == 0).count() as i32
     }
     fn trim_animals(&self, animals: Animals) -> Animals {
         // Boars can live in forest stables (1 per stable)
-        let boar_fixed = self.tiles.iter().flatten()
+        let boar_fixed = self.outdoor.iter().flatten()
             .filter(|&&t| t == Tile::ForestStable)
             .count();
         // Sheep can live on unfenced meadows, guarded by dogs (dogs+1 total if any meadow exists)
-        let sheep_meadow = if self.tiles.iter().flatten().any(|&t| t == Tile::Meadow) {
+        let sheep_meadow = if self.outdoor.iter().flatten().any(|&t| t == Tile::Meadow) {
             self.dogs + 1
         } else {
             0
         };
         // Flexible slots: each MeadowStable holds 1 farm animal; dwelling holds 2
-        let flex = self.tiles.iter().flatten()
+        let flex = self.outdoor.iter().flatten()
             .filter(|&&t| t == Tile::MeadowStable)
             .count() + 2;
 
         // Capacity per pasture: cells * 2, doubled for each stable in the pasture
         let pasture_caps: Vec<usize> = self.pastures.iter().map(|p| {
             let stables = p.cells.iter()
-                .filter(|&&(x, y)| self.tiles[y][x] == Tile::PastureStable)
+                .filter(|&&(x, y)| self.outdoor[y][x] == Tile::PastureStable)
                 .count();
             p.cells.len() * 2 * (1 << stables)
         }).collect();
 
         // Donkeys can live in mines (1 per ore mine or ruby mine)
-        let donkey_fixed_cap = self.tiles.iter().flatten()
+        let donkey_fixed_cap = self.indoor.iter().flatten()
             .filter(|&&t| matches!(t, Tile::OreMine | Tile::RubyMine))
             .count();
 
@@ -513,7 +580,7 @@ impl Player {
     }
 
     fn stable_count(&self) -> usize {
-        self.tiles.iter().flatten()
+        self.outdoor.iter().flatten()
             .filter(|&&t| matches!(t, Tile::ForestStable | Tile::MeadowStable | Tile::PastureStable))
             .count()
     }
@@ -529,15 +596,15 @@ impl Player {
     }
     fn harvest(&mut self) {
         for y in 0..BOARD_HEIGHT {
-            for x in 0..BOARD_WIDTH {
-                match self.tiles[y][x] {
+            for x in 0..HALF_WIDTH {
+                match self.outdoor[y][x] {
                     Tile::Field((w, _)) if w > 0 => {
                         self.resources.wheat += 1;
-                        self.tiles[y][x] = Tile::Field((w - 1, 0));
+                        self.outdoor[y][x] = Tile::Field((w - 1, 0));
                     }
                     Tile::Field((_, v)) if v > 0 => {
                         self.resources.vegetables += 1;
-                        self.tiles[y][x] = Tile::Field((0, v - 1));
+                        self.outdoor[y][x] = Tile::Field((0, v - 1));
                     }
                     _ => {}
                 }
@@ -557,7 +624,7 @@ impl Player {
 
             for &(x, y) in &pasture.cells {
                 assert!(
-                    matches!(self.tiles[y][x], Tile::Pasture | Tile::PastureStable),
+                    matches!(self.outdoor[y][x], Tile::Pasture | Tile::PastureStable),
                     "pasture {i} cell ({x},{y}) is not a pasture tile"
                 );
                 assert!(seen.insert((x, y)), "cell ({x},{y}) appears in multiple pastures");
@@ -729,14 +796,14 @@ impl State {
         };
 
         let meadows: Vec<(usize, usize)> = (0..BOARD_HEIGHT)
-            .flat_map(|y| (0..BOARD_WIDTH).map(move |x| (x, y)))
-            .filter(|&(x, y)| player.tiles[y][x].is_fenceable())
+            .flat_map(|y| (0..HALF_WIDTH).map(move |x| (x, y)))
+            .filter(|&(x, y)| player.outdoor[y][x].is_fenceable())
             .collect();
 
         if player.resources.wood >= 2 {
             for &(x, y) in &meadows {
                 let mut child = self.clone();
-                child.players[player_idx].tiles[y][x] = fence(player.tiles[y][x]);
+                child.players[player_idx].outdoor[y][x] = fence(player.outdoor[y][x]);
                 child.players[player_idx].resources.wood -= 2;
                 child.players[player_idx].pastures.push(Pasture { cells: vec![(x, y)], animals: None });
                 results.push(child);
@@ -746,11 +813,11 @@ impl State {
         if player.resources.wood >= 4 {
             for &(x, y) in &meadows {
                 for (x2, y2) in [(x + 1, y), (x, y + 1)] {
-                    if x2 >= BOARD_WIDTH || y2 >= BOARD_HEIGHT { continue; }
-                    if !player.tiles[y2][x2].is_fenceable() { continue; }
+                    if x2 >= HALF_WIDTH || y2 >= BOARD_HEIGHT { continue; }
+                    if !player.outdoor[y2][x2].is_fenceable() { continue; }
                     let mut child = self.clone();
-                    child.players[player_idx].tiles[y][x] = fence(player.tiles[y][x]);
-                    child.players[player_idx].tiles[y2][x2] = fence(player.tiles[y2][x2]);
+                    child.players[player_idx].outdoor[y][x] = fence(player.outdoor[y][x]);
+                    child.players[player_idx].outdoor[y2][x2] = fence(player.outdoor[y2][x2]);
                     child.players[player_idx].resources.wood -= 4;
                     child.players[player_idx].pastures.push(Pasture {
                         cells: vec![(x, y), (x2, y2)],
@@ -773,10 +840,10 @@ impl State {
         }
 
         for y in 0..BOARD_HEIGHT {
-            for x in 0..BOARD_WIDTH {
-                if let Some(t) = player.tiles[y][x].maybe_add_stable() {
+            for x in 0..HALF_WIDTH {
+                if let Some(t) = player.outdoor[y][x].maybe_add_stable() {
                     let mut child = self.clone();
-                    child.players[player_idx].tiles[y][x] = t;
+                    child.players[player_idx].outdoor[y][x] = t;
                     child.players[player_idx].resources.stone -= 1;
                     results.push(child);
                 }
@@ -828,8 +895,8 @@ impl State {
         let p = &self.players[player_idx];
         let mut opts = vec![];
         for y in 0..BOARD_HEIGHT {
-            for x in 0..BOARD_WIDTH {
-                if p.tiles[y][x] != Tile::Cave {
+            for x in 0..HALF_WIDTH {
+                if p.indoor[y][x] != Tile::Cave {
                     continue;
                 }
                 for f in furnishings {
@@ -837,7 +904,7 @@ impl State {
                         continue;
                     }
                     let used = self.players.iter()
-                        .flat_map(|pl| pl.tiles.iter().flatten())
+                        .flat_map(|pl| pl.indoor.iter().flatten())
                         .filter(|&&t| t == f.tile)
                         .count();
                     if used >= f.max_count {
@@ -846,7 +913,7 @@ impl State {
                     let mut c = self.clone();
                     c.players[player_idx].resources.wood -= f.cost_wood;
                     c.players[player_idx].resources.stone -= f.cost_stone;
-                    c.players[player_idx].tiles[y][x] = f.tile;
+                    c.players[player_idx].indoor[y][x] = f.tile;
                     opts.push(c);
                 }
             }
@@ -887,8 +954,8 @@ impl State {
     fn sow_options(&self, player_idx: usize) -> Vec<Self> {
         let player = &self.players[player_idx];
         let fields: Vec<(usize, usize)> = (0..BOARD_HEIGHT)
-            .flat_map(|y| (0..BOARD_WIDTH).map(move |x| (x, y)))
-            .filter(|&(x, y)| player.tiles[y][x] == Tile::Field((0, 0)))
+            .flat_map(|y| (0..HALF_WIDTH).map(move |x| (x, y)))
+            .filter(|&(x, y)| player.outdoor[y][x] == Tile::Field((0, 0)))
             .collect();
         let max_wheat = player.resources.wheat.min(2);
         let max_veg = player.resources.vegetables.min(2);
@@ -901,10 +968,10 @@ impl State {
                 child.players[player_idx].resources.wheat -= w;
                 child.players[player_idx].resources.vegetables -= v;
                 for &(x, y) in &fields[..w] {
-                    child.players[player_idx].tiles[y][x] = Tile::Field((3, 0));
+                    child.players[player_idx].outdoor[y][x] = Tile::Field((3, 0));
                 }
                 for &(x, y) in &fields[w..w + v] {
-                    child.players[player_idx].tiles[y][x] = Tile::Field((0, 2));
+                    child.players[player_idx].outdoor[y][x] = Tile::Field((0, 2));
                 }
                 results.push(child);
             }
@@ -950,17 +1017,17 @@ impl GameState for State {
                         child.starting_player = current as u8;
                     }
                     if space == ActionSpace::OreMining || space == ActionSpace::OreDelivery {
-                        let mines = child.players[current].tiles.iter().flatten()
+                        let mines = child.players[current].indoor.iter().flatten()
                             .filter(|&&t| t == Tile::OreMine).count();
                         child.players[current].resources.coal += mines * 2;
                     }
                     if space == ActionSpace::RubyMining {
-                        let has_mine = child.players[current].tiles.iter().flatten()
+                        let has_mine = child.players[current].indoor.iter().flatten()
                             .any(|&t| t == Tile::RubyMine);
                         if has_mine { child.players[current].resources.rubies += 1; }
                     }
                     if space == ActionSpace::RubyDelivery {
-                        let mines = child.players[current].tiles.iter().flatten()
+                        let mines = child.players[current].indoor.iter().flatten()
                             .filter(|&&t| t == Tile::RubyMine).count();
                         if mines >= 2 { child.players[current].resources.rubies += 1; }
                     }
@@ -972,19 +1039,34 @@ impl GameState for State {
                         vec![child]
                     } else {
                         tile_choices.into_iter().flat_map(|tile| {
-                            let boards = child.players[current].tile_placements(tile);
-                            if boards.is_empty() {
+                            let placements = child.players[current].tile_placements(tile);
+                            if placements.is_empty() {
                                 vec![child.clone()]
                             } else {
-                                boards.into_iter().map(|board| {
+                                placements.into_iter().map(|(side, new_board)| {
                                     let mut c = child.clone();
-                                    let replaced = board_delta(&child.players[current].tiles, &board);
+                                    let (replaced, changed) = match side {
+                                        Side::Outdoor => (
+                                            board_delta(&child.players[current].outdoor, &new_board),
+                                            changed_cells(&child.players[current].outdoor, &new_board),
+                                        ),
+                                        Side::Indoor => (
+                                            board_delta(&child.players[current].indoor, &new_board),
+                                            changed_cells(&child.players[current].indoor, &new_board),
+                                        ),
+                                    };
                                     space.gain_placement_resources(replaced, &mut c.players[current].resources);
-                                    for pos in changed_cells(&child.players[current].tiles, &board) {
+                                    for pos in changed {
                                         let p = &mut c.players[current];
-                                        apply_location_bonus(pos, &mut p.resources, &mut p.animals);
+                                        match side {
+                                            Side::Outdoor => apply_outdoor_location_bonus(pos, &mut p.resources, &mut p.animals),
+                                            Side::Indoor  => apply_indoor_location_bonus(pos, &mut p.resources, &mut p.animals),
+                                        }
                                     }
-                                    c.players[current].tiles = board;
+                                    match side {
+                                        Side::Outdoor => c.players[current].outdoor = new_board,
+                                        Side::Indoor  => c.players[current].indoor  = new_board,
+                                    }
                                     c
                                 }).collect()
                             }
@@ -1230,4 +1312,5 @@ impl GameState for State {
             .max_by_key(|(_, p)| p.points())
             .map(|(i, _)| i)
     }
+
 }
