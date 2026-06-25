@@ -1012,7 +1012,7 @@ impl GameState for State {
                         tile_choices.into_iter().flat_map(|tile| {
                             let placements = child.players[current].tile_placements(tile);
                             if placements.is_empty() {
-                                vec![child.clone()]
+                                vec![]
                             } else {
                                 placements.into_iter().map(|(side, new_board)| {
                                     let mut c = child.clone();
