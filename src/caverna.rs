@@ -270,28 +270,25 @@ enum Tile {
 }
 
 impl Tile {
-    fn base(self) -> Tile {
-        match self {
-            Tile::Meadow | Tile::MeadowStable
-            | Tile::Pasture | Tile::PastureStable
-            | Tile::Field(_) => Tile::Forest,
-            Tile::Tunnel | Tile::Cave | Tile::Dwelling => Tile::Mountain,
-            Tile::OreTunnel | Tile::OreMine => Tile::Tunnel,
-            Tile::RubyMine => Tile::Mountain,
-            Tile::Forest | Tile::ForestStable | Tile::Mountain => self,
-        }
-    }
-
     fn is_undeveloped(self) -> bool {
         matches!(self, Tile::Forest | Tile::Mountain)
     }
 
+    fn is_outdoor(self) -> bool {
+        matches!(self, Tile::Forest | Tile::ForestStable | Tile::Meadow | Tile::MeadowStable
+            | Tile::Pasture | Tile::PastureStable | Tile::Field(_))
+    }
+
     fn can_place_on(self, other: Tile) -> bool {
-        self.base() == other
+        matches!((self, other),
+            (Tile::Meadow | Tile::MeadowStable | Tile::Pasture | Tile::PastureStable | Tile::Field(_), Tile::Forest)
+            | (Tile::Tunnel | Tile::Cave | Tile::Dwelling | Tile::RubyMine, Tile::Mountain)
+            | (Tile::OreTunnel | Tile::OreMine, Tile::Tunnel)
+        )
     }
 
     fn requires_adjacency(self) -> bool {
-        self.base().is_undeveloped()
+        !matches!(self, Tile::OreTunnel | Tile::OreMine)
     }
 
     fn is_fenceable(self) -> bool {
@@ -344,7 +341,7 @@ enum TileGroup {
 impl TileGroup {
     fn side(&self) -> Side {
         let t = match self { TileGroup::Single(t) => *t, TileGroup::Twin((t, _)) => *t };
-        if matches!(t.base(), Tile::Forest) { Side::Outdoor } else { Side::Indoor }
+        if t.is_outdoor() { Side::Outdoor } else { Side::Indoor }
     }
 }
 
