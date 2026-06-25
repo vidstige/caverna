@@ -644,9 +644,6 @@ impl State {
         }
         State { players, round: 0, starting_player: 0, accumulated: [0u32; ActionSpace::COUNT], current_player: 0, phase: Phase::Placement }
     }
-    pub fn is_placement(&self) -> bool {
-        self.phase == Phase::Placement
-    }
     fn rounds(&self) -> u32 {
         match self.players.len() {
             2 => 11,
