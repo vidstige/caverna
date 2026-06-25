@@ -933,7 +933,8 @@ impl GameState for State {
 
                     let mut child = self.clone();
                     child.players[current].dwarfs.iter_mut()
-                        .find(|d| d.placed_on.is_none())
+                        .filter(|d| d.placed_on.is_none())
+                        .min_by_key(|d| d.weapon)
                         .expect("current player has no unplaced dwarf")
                         .placed_on = Some(space);
                     space.gain_resources(child.accumulated[space as usize], &mut child.players[current].resources);
