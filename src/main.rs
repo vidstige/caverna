@@ -4,11 +4,126 @@ mod mcts;
 mod test_caverna;
 
 use crate::{
-    caverna::State,
+    caverna::{ActionSpace, Phase, Resources, State},
     mcts::{random_move, search, GameState},
 };
 use rand::SeedableRng;
 use rand::rngs::StdRng;
+
+impl std::fmt::Display for ActionSpace {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let name = match self {
+            ActionSpace::DriftMining          => "Drift Mining",
+            ActionSpace::Logging              => "Logging",
+            ActionSpace::WoodGathering        => "Wood Gathering",
+            ActionSpace::Excavation           => "Excavation",
+            ActionSpace::Supplies             => "Supplies",
+            ActionSpace::Clearing             => "Clearing",
+            ActionSpace::StartingPlayer       => "Starting Player",
+            ActionSpace::OreMining            => "Ore Mining",
+            ActionSpace::Sustenance           => "Sustenance",
+            ActionSpace::RubyMining           => "Ruby Mining",
+            ActionSpace::Housework            => "Housework",
+            ActionSpace::SlashAndBurn         => "Slash and Burn",
+            ActionSpace::SheepFarming         => "Sheep Farming",
+            ActionSpace::OreMineConstruction  => "Ore Mine Construction",
+            ActionSpace::Blacksmithing        => "Blacksmithing",
+            ActionSpace::WishForChildren      => "Wish for Children",
+            ActionSpace::RubyMineConstruction => "Ruby Mine Construction",
+            ActionSpace::DonkeyFarming        => "Donkey Farming",
+            ActionSpace::FamilyLife           => "Family Life",
+            ActionSpace::OreDelivery          => "Ore Delivery",
+            ActionSpace::RubyDelivery         => "Ruby Delivery",
+            ActionSpace::Adventure            => "Adventure",
+        };
+        write!(f, "{}", name)
+    }
+}
+
+fn resource_delta_parts(old: &Resources, new: &Resources) -> Vec<String> {
+    let mut parts = vec![];
+    macro_rules! diff {
+        ($field:ident, $name:literal) => {
+            match new.$field as i64 - old.$field as i64 {
+                d if d > 0 => parts.push(format!("+{} {}", d, $name)),
+                d if d < 0 => parts.push(format!("{} {}", d, $name)),
+                _ => {}
+            }
+        };
+    }
+    diff!(wood, "wood");
+    diff!(stone, "stone");
+    diff!(coal, "coal");
+    diff!(rubies, "rubies");
+    diff!(food, "food");
+    diff!(wheat, "wheat");
+    diff!(vegetables, "veg");
+    diff!(gold, "gold");
+    if new.begging > old.begging {
+        parts.push(format!("+{} begging", new.begging - old.begging));
+    }
+    parts
+}
+
+fn animal_delta_parts(old: &[usize; 4], new: &[usize; 4], old_dogs: usize, new_dogs: usize) -> Vec<String> {
+    let names = ["cow", "boar", "donkey", "sheep"];
+    let mut parts = vec![];
+    for i in 0..4 {
+        match new[i] as i64 - old[i] as i64 {
+            d if d > 0 => parts.push(format!("+{} {}", d, names[i])),
+            d if d < 0 => parts.push(format!("{} {}", d, names[i])),
+            _ => {}
+        }
+    }
+    match new_dogs as i64 - old_dogs as i64 {
+        d if d > 0 => parts.push(format!("+{} dog", d)),
+        d if d < 0 => parts.push(format!("{} dog", d)),
+        _ => {}
+    }
+    parts
+}
+
+fn describe_move(state: &State, next: &State) -> String {
+    let current = state.current_player;
+    let p_old = &state.players[current];
+    let p_new = &next.players[current];
+
+    let mut parts = resource_delta_parts(&p_old.resources, &p_new.resources);
+    parts.extend(animal_delta_parts(&p_old.animals, &p_new.animals, p_old.dogs, p_new.dogs));
+
+    for (i, (nd, od)) in p_new.dwarfs.iter().zip(p_old.dwarfs.iter()).enumerate() {
+        if nd.weapon > od.weapon {
+            parts.push(format!("dwarf {} forged weapon {}", i + 1, nd.weapon));
+        }
+    }
+    if p_new.children > p_old.children {
+        parts.push(format!("+{} child", p_new.children - p_old.children));
+    }
+    if p_new.dwarfs.len() > p_old.dwarfs.len() {
+        parts.push(format!("+{} dwarf", p_new.dwarfs.len() - p_old.dwarfs.len()));
+    }
+
+    let gains = if parts.is_empty() { String::new() } else { format!(" ({})", parts.join(", ")) };
+
+    match &state.phase {
+        Phase::Placement => {
+            let space = p_new.dwarfs.iter().zip(p_old.dwarfs.iter())
+                .find_map(|(nd, od)| {
+                    if nd.placed_on.is_some() && od.placed_on.is_none() { nd.placed_on } else { None }
+                });
+            let space_str = space.map_or("?".to_string(), |s| format!("{}", s));
+            format!("{}{}", space_str, gains)
+        }
+        Phase::Expedition { .. } => {
+            if parts.is_empty() { "expedition pass".to_string() }
+            else { format!("expedition pick{}", gains) }
+        }
+        Phase::Trading => {
+            if next.round > state.round || parts.is_empty() { "done trading".to_string() }
+            else { format!("trade{}", gains) }
+        }
+    }
+}
 
 fn main() {
     let mut seed: Option<u64> = None;
@@ -40,14 +155,13 @@ fn main() {
             round = state.round;
             println!("=== Round {} ===", round + 1);
         }
-        if state.is_placement() {
-            println!("{}", names[state.current_player()]);
-        }
-        if state.current_player() == 0 {
-            state = search(&state, &mut rng, mcts_iter).unwrap();
+        let next = if state.current_player() == 0 {
+            search(&state, &mut rng, mcts_iter).unwrap()
         } else {
-            state = random_move(&state, &mut rng);
-        }
+            random_move(&state, &mut rng)
+        };
+        println!("  {}: {}", names[state.current_player()], describe_move(&state, &next));
+        state = next;
     }
     for (index, player) in state.players.iter().enumerate() {
         println!("player {}, {}", names[index], player.points());

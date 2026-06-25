@@ -263,17 +263,17 @@ pub struct Dwarf {
 
 #[derive(Clone, Copy)]
 pub struct Resources {
-    gold: usize,
-    begging: usize,
+    pub(crate) gold: usize,
+    pub(crate) begging: usize,
 
-    wood: usize,
-    stone: usize,
-    coal: usize,
-    rubies: usize,
-    food: usize,
+    pub(crate) wood: usize,
+    pub(crate) stone: usize,
+    pub(crate) coal: usize,
+    pub(crate) rubies: usize,
+    pub(crate) food: usize,
 
-    wheat: usize,
-    vegetables: usize,
+    pub(crate) wheat: usize,
+    pub(crate) vegetables: usize,
 }
 impl Resources {
     fn zero() -> Resources {
@@ -312,9 +312,9 @@ pub struct Player {
     pub dwarfs: Vec<Dwarf>,
     pub children: usize,
     tiles: [[Tile; BOARD_WIDTH]; BOARD_HEIGHT],
-    resources: Resources,
-    dogs: usize,
-    animals: Animals, // indexed by AnimalType
+    pub(crate) resources: Resources,
+    pub(crate) dogs: usize,
+    pub(crate) animals: Animals, // indexed by AnimalType
     pastures: Vec<Pasture>,
 }
 impl Player {
@@ -581,7 +581,7 @@ impl Player {
 }
 
 #[derive(Clone, PartialEq)]
-enum Phase {
+pub(crate) enum Phase {
     Placement,
     Expedition { space: ActionSpace, remaining_picks: usize, remaining_expeditions: usize, used_items: u16 },
     Trading,
@@ -593,8 +593,8 @@ pub struct State {
     pub round: u32,
     pub starting_player: u8,
     pub accumulated: [u32; ActionSpace::COUNT],
-    current_player: usize,
-    phase: Phase,
+    pub(crate) current_player: usize,
+    pub(crate) phase: Phase,
 }
 impl State {
     pub fn new(count: u32) -> Self {
