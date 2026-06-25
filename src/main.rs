@@ -170,9 +170,25 @@ fn print_player_state(player: &Player) {
     }
 }
 
+fn print_options(state: &State, chosen: &State, rng: &mut StdRng) {
+    use std::collections::BTreeMap;
+    let chosen_desc = describe_move(state, chosen);
+    let children = state.children(rng);
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    for child in &children {
+        *counts.entry(describe_move(state, child)).or_insert(0) += 1;
+    }
+    println!("    {} children:", children.len());
+    for (desc, count) in &counts {
+        let marker = if *desc == chosen_desc { '>' } else { ' ' };
+        println!("    {} {:>3}x {}", marker, count, desc);
+    }
+}
+
 fn main() {
     let mut seed: Option<u64> = None;
     let mut mcts_iter: usize = 1000;
+    let mut verbose = false;
 
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -183,6 +199,7 @@ fn main() {
             "--mcts-iter" => {
                 mcts_iter = args.next().expect("--mcts-iter requires a value").parse().expect("--mcts-iter must be a number");
             }
+            "-v" | "--verbose" => verbose = true,
             other => eprintln!("unknown argument: {}", other),
         }
     }
@@ -208,6 +225,9 @@ fn main() {
         };
         println!("  {}: {}", names[current], describe_move(&state, &next));
         print_player_state(&next.players[current]);
+        if verbose {
+            print_options(&state, &next, &mut rng);
+        }
         state = next;
     }
     for (index, player) in state.players.iter().enumerate() {
