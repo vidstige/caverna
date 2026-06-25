@@ -188,6 +188,67 @@ fn adjacent_to_developed(board: &Board, x: usize, y: usize) -> bool {
     adjacents(x, y).any(|(nx, ny)| !board[ny][nx].is_undeveloped())
 }
 
+fn cells_adjacent_to_developed(board: &Board) -> Vec<(usize, usize)> {
+    if board.iter().flatten().all(|t| t.is_undeveloped()) {
+        return vec![(2, 3)];
+    }
+    (0..BOARD_HEIGHT).flat_map(|y| (0..HALF_WIDTH).map(move |x| (x, y)))
+        .filter(|&(x, y)| adjacent_to_developed(board, x, y))
+        .collect()
+}
+
+fn tile_placements_on(board: &Board, tile: TileGroup) -> Vec<Board> {
+    let mut result = vec![];
+    match tile {
+        TileGroup::Single(t) => {
+            let anchors: Vec<(usize, usize)> = if t.requires_adjacency() {
+                cells_adjacent_to_developed(board).into_iter()
+                    .filter(|&(x, y)| t.can_place_on(board[y][x]))
+                    .collect()
+            } else {
+                (0..BOARD_HEIGHT).flat_map(|y| (0..HALF_WIDTH).map(move |x| (x, y)))
+                    .filter(|&(x, y)| t.can_place_on(board[y][x]))
+                    .collect()
+            };
+            for (x, y) in anchors {
+                let mut b = *board;
+                b[y][x] = t;
+                result.push(b);
+            }
+        }
+        TileGroup::Twin((t1, t2)) => {
+            let requires_adj = t1.requires_adjacency();
+            let anchors: std::collections::HashSet<(usize, usize)> = if requires_adj {
+                cells_adjacent_to_developed(board).into_iter().collect()
+            } else {
+                std::collections::HashSet::new()
+            };
+            for y in 0..BOARD_HEIGHT {
+                for x in 0..HALF_WIDTH {
+                    for (x2, y2) in [(x + 1, y), (x, y + 1)] {
+                        if x2 >= HALF_WIDTH || y2 >= BOARD_HEIGHT { continue; }
+                        if !t1.can_place_on(board[y][x]) || !t2.can_place_on(board[y2][x2]) { continue; }
+                        let valid = !requires_adj
+                            || anchors.contains(&(x, y))
+                            || anchors.contains(&(x2, y2));
+                        if valid {
+                            let mut b = *board;
+                            b[y][x] = t1; b[y2][x2] = t2;
+                            result.push(b);
+                            if t1 != t2 {
+                                let mut b = *board;
+                                b[y][x] = t2; b[y2][x2] = t1;
+                                result.push(b);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    result
+}
+
 #[derive(Clone, Copy, PartialEq)]
 enum Tile {
     // Outdoor
@@ -223,6 +284,14 @@ impl Tile {
 
     fn is_undeveloped(self) -> bool {
         matches!(self, Tile::Forest | Tile::Mountain)
+    }
+
+    fn can_place_on(self, other: Tile) -> bool {
+        self.base() == other
+    }
+
+    fn requires_adjacency(self) -> bool {
+        self.base().is_undeveloped()
     }
 
     fn is_fenceable(self) -> bool {
@@ -381,100 +450,10 @@ impl Player {
         self.children = 0;
     }
 
-    fn outdoor_tile_placements(&self, tile: TileGroup) -> Vec<Board> {
-        let mut result = vec![];
-        match tile {
-            TileGroup::Single(t) => {
-                let base = t.base();
-                for y in 0..BOARD_HEIGHT {
-                    for x in 0..HALF_WIDTH {
-                        if self.outdoor[y][x] != base { continue; }
-                        if adjacent_to_developed(&self.outdoor, x, y) {
-                            let mut board = self.outdoor;
-                            board[y][x] = t;
-                            result.push(board);
-                        }
-                    }
-                }
-            }
-            TileGroup::Twin((t1, t2)) => {
-                let base = t1.base();
-                let all_undeveloped = self.outdoor.iter().flatten().all(|t| t.is_undeveloped());
-                for y in 0..BOARD_HEIGHT {
-                    for x in 0..HALF_WIDTH {
-                        for (x2, y2) in [(x + 1, y), (x, y + 1)] {
-                            if x2 >= HALF_WIDTH || y2 >= BOARD_HEIGHT { continue; }
-                            if self.outdoor[y][x] != base || self.outdoor[y2][x2] != base { continue; }
-                            let valid = if all_undeveloped {
-                                (x == 2 && y == 3) || (x2 == 2 && y2 == 3)
-                            } else {
-                                adjacent_to_developed(&self.outdoor, x, y) || adjacent_to_developed(&self.outdoor, x2, y2)
-                            };
-                            if valid {
-                                let mut board = self.outdoor;
-                                board[y][x] = t1; board[y2][x2] = t2;
-                                result.push(board);
-                                if t1 != t2 {
-                                    let mut board = self.outdoor;
-                                    board[y][x] = t2; board[y2][x2] = t1;
-                                    result.push(board);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        result
-    }
-
-    fn indoor_tile_placements(&self, tile: TileGroup) -> Vec<Board> {
-        let mut result = vec![];
-        match tile {
-            TileGroup::Single(t) => {
-                let base = t.base();
-                for y in 0..BOARD_HEIGHT {
-                    for x in 0..HALF_WIDTH {
-                        if self.indoor[y][x] != base { continue; }
-                        if adjacent_to_developed(&self.indoor, x, y) {
-                            let mut board = self.indoor;
-                            board[y][x] = t;
-                            result.push(board);
-                        }
-                    }
-                }
-            }
-            TileGroup::Twin((t1, t2)) => {
-                let base = t1.base();
-                for y in 0..BOARD_HEIGHT {
-                    for x in 0..HALF_WIDTH {
-                        for (x2, y2) in [(x + 1, y), (x, y + 1)] {
-                            if x2 >= HALF_WIDTH || y2 >= BOARD_HEIGHT { continue; }
-                            if self.indoor[y][x] != base || self.indoor[y2][x2] != base { continue; }
-                            let valid = adjacent_to_developed(&self.indoor, x, y)
-                                || adjacent_to_developed(&self.indoor, x2, y2);
-                            if valid {
-                                let mut board = self.indoor;
-                                board[y][x] = t1; board[y2][x2] = t2;
-                                result.push(board);
-                                if t1 != t2 {
-                                    let mut board = self.indoor;
-                                    board[y][x] = t2; board[y2][x2] = t1;
-                                    result.push(board);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        result
-    }
-
     fn tile_placements(&self, tile: TileGroup) -> Vec<(Side, Board)> {
         match tile.side() {
-            Side::Outdoor => self.outdoor_tile_placements(tile).into_iter().map(|b| (Side::Outdoor, b)).collect(),
-            Side::Indoor  => self.indoor_tile_placements(tile).into_iter().map(|b| (Side::Indoor,  b)).collect(),
+            Side::Outdoor => tile_placements_on(&self.outdoor, tile).into_iter().map(|b| (Side::Outdoor, b)).collect(),
+            Side::Indoor  => tile_placements_on(&self.indoor,  tile).into_iter().map(|b| (Side::Indoor,  b)).collect(),
         }
     }
 
