@@ -72,6 +72,96 @@ impl ActionSpace {
         if self == ActionSpace::Housework { player.dogs += 1; }
     }
 
+    // Returns (state, sub_stack) candidates after the dwarf has been placed and gains applied.
+    // stack vec: last element = current sub-action (first to execute).
+    fn sub_actions(self, base: State, current: usize) -> Vec<(State, Vec<SubAction>)> {
+        match self {
+            ActionSpace::Excavation => vec![
+                (base.clone(), vec![SubAction::PlaceTile(TileGroup::Twin((Tile::Tunnel, Tile::Cave)))]),
+                (base.clone(), vec![SubAction::PlaceTile(TileGroup::Twin((Tile::Cave, Tile::Cave)))]),
+                (base, vec![]),
+            ],
+            ActionSpace::Blacksmithing =>
+                base.forge_options(current, self).into_iter()
+                    .map(|c| (c, vec![SubAction::ExpeditionPick { space: self, picks_remaining: 3, used_items: 0 }]))
+                    .collect(),
+            ActionSpace::Adventure => {
+                let exp_stack = vec![
+                    SubAction::ExpeditionPick { space: self, picks_remaining: 1, used_items: 0 },
+                    SubAction::ExpeditionPick { space: self, picks_remaining: 1, used_items: 0 },
+                ];
+                let armed = base.players[current].dwarfs.iter()
+                    .find(|d| d.placed_on == Some(self))
+                    .map_or(false, |d| d.weapon > 0);
+                if armed {
+                    vec![(base, exp_stack)]
+                } else {
+                    let mut opts = vec![(base.clone(), exp_stack.clone())];
+                    opts.extend(base.forge_options(current, self).into_iter().map(|c| (c, exp_stack.clone())));
+                    opts
+                }
+            }
+            ActionSpace::WishForChildren => {
+                let mut opts = vec![];
+                if let Some(grown) = base.family_growth_option(current) {
+                    opts.push((grown, vec![]));
+                }
+                opts.push((base, vec![SubAction::Furnish]));
+                opts
+            }
+            ActionSpace::FamilyLife => {
+                let mut opts = vec![];
+                if let Some(grown) = base.family_growth_option(current) {
+                    opts.push((grown.clone(), vec![]));
+                    opts.push((grown, vec![SubAction::Sow]));
+                }
+                opts.push((base.clone(), vec![SubAction::Sow]));
+                opts.push((base, vec![]));
+                opts
+            }
+            ActionSpace::SheepFarming | ActionSpace::DonkeyFarming =>
+                vec![(base, vec![SubAction::Stable, SubAction::Pasture])],
+            ActionSpace::Housework => vec![
+                (base.clone(), vec![SubAction::Furnish]),
+                (base, vec![]),
+            ],
+            ActionSpace::Logging =>
+                vec![(base, vec![SubAction::ExpeditionPick { space: self, picks_remaining: 1, used_items: 0 }])],
+            ActionSpace::OreMineConstruction => {
+                let tile = TileGroup::Twin((Tile::DeepTunnel, Tile::OreMine));
+                let exp = SubAction::ExpeditionPick { space: self, picks_remaining: 1, used_items: 0 };
+                vec![
+                    (base.clone(), vec![exp.clone(), SubAction::PlaceTile(tile)]),
+                    (base, vec![exp]),
+                ]
+            }
+            ActionSpace::SlashAndBurn => {
+                let tile = TileGroup::Twin((Tile::Meadow, Tile::Field((0, 0))));
+                vec![
+                    (base.clone(), vec![SubAction::Sow, SubAction::PlaceTile(tile.clone())]),
+                    (base.clone(), vec![SubAction::PlaceTile(tile)]),
+                    (base, vec![SubAction::Sow]),
+                ]
+            }
+            ActionSpace::DriftMining => vec![
+                (base.clone(), vec![SubAction::PlaceTile(TileGroup::Twin((Tile::Tunnel, Tile::Cave)))]),
+                (base, vec![]),
+            ],
+            ActionSpace::Clearing | ActionSpace::Sustenance => {
+                let tile = TileGroup::Twin((Tile::Meadow, Tile::Field((0, 0))));
+                vec![
+                    (base.clone(), vec![SubAction::PlaceTile(tile)]),
+                    (base, vec![]),
+                ]
+            }
+            ActionSpace::RubyMineConstruction => vec![
+                (base.clone(), vec![SubAction::PlaceTile(TileGroup::Single(Tile::RubyMine))]),
+                (base, vec![]),
+            ],
+            _ => vec![(base, vec![])],
+        }
+    }
+
     fn gain_resources(self, rounds: u32, resources: &mut Resources) {
         let r = rounds as usize;
         match self {
@@ -908,93 +998,7 @@ impl GameState for State {
                     space.apply_gains(base.accumulated[space as usize], &mut base.players[current]);
                     if space == ActionSpace::StartingPlayer { base.starting_player = current as u8; }
 
-                    // Build (state, sub_stack) candidates; stack vec: last = current (first to execute)
-                    let mut candidates: Vec<(Self, Vec<SubAction>)> = match space {
-                        ActionSpace::Excavation => vec![
-                            (base.clone(), vec![SubAction::PlaceTile(TileGroup::Twin((Tile::Tunnel, Tile::Cave)))]),
-                            (base.clone(), vec![SubAction::PlaceTile(TileGroup::Twin((Tile::Cave, Tile::Cave)))]),
-                            (base, vec![]),
-                        ],
-                        ActionSpace::Blacksmithing => {
-                            base.forge_options(current, space).into_iter()
-                                .map(|c| (c, vec![SubAction::ExpeditionPick { space, picks_remaining: 3, used_items: 0 }]))
-                                .collect()
-                        }
-                        ActionSpace::Adventure => {
-                            let exp_stack = vec![
-                                SubAction::ExpeditionPick { space, picks_remaining: 1, used_items: 0 },
-                                SubAction::ExpeditionPick { space, picks_remaining: 1, used_items: 0 },
-                            ];
-                            let armed = base.players[current].dwarfs.iter()
-                                .find(|d| d.placed_on == Some(space))
-                                .map_or(false, |d| d.weapon > 0);
-                            if armed {
-                                vec![(base, exp_stack)]
-                            } else {
-                                let mut opts = vec![(base.clone(), exp_stack.clone())];
-                                opts.extend(base.forge_options(current, space).into_iter().map(|c| (c, exp_stack.clone())));
-                                opts
-                            }
-                        }
-                        ActionSpace::WishForChildren => {
-                            let mut opts = vec![];
-                            if let Some(grown) = base.family_growth_option(current) {
-                                opts.push((grown, vec![]));
-                            }
-                            opts.push((base, vec![SubAction::Furnish]));
-                            opts
-                        }
-                        ActionSpace::FamilyLife => {
-                            let mut opts = vec![];
-                            if let Some(grown) = base.family_growth_option(current) {
-                                opts.push((grown.clone(), vec![]));
-                                opts.push((grown, vec![SubAction::Sow]));
-                            }
-                            opts.push((base.clone(), vec![SubAction::Sow]));
-                            opts.push((base, vec![]));
-                            opts
-                        }
-                        ActionSpace::SheepFarming | ActionSpace::DonkeyFarming =>
-                            vec![(base, vec![SubAction::Stable, SubAction::Pasture])],
-                        ActionSpace::Housework => vec![
-                            (base.clone(), vec![SubAction::Furnish]),
-                            (base, vec![]),
-                        ],
-                        ActionSpace::Logging =>
-                            vec![(base, vec![SubAction::ExpeditionPick { space, picks_remaining: 1, used_items: 0 }])],
-                        ActionSpace::OreMineConstruction => {
-                            let tile = TileGroup::Twin((Tile::DeepTunnel, Tile::OreMine));
-                            let exp = SubAction::ExpeditionPick { space, picks_remaining: 1, used_items: 0 };
-                            vec![
-                                (base.clone(), vec![exp.clone(), SubAction::PlaceTile(tile)]),
-                                (base, vec![exp]),
-                            ]
-                        }
-                        ActionSpace::SlashAndBurn => {
-                            let tile = TileGroup::Twin((Tile::Meadow, Tile::Field((0, 0))));
-                            vec![
-                                (base.clone(), vec![SubAction::Sow, SubAction::PlaceTile(tile.clone())]),
-                                (base.clone(), vec![SubAction::PlaceTile(tile)]),
-                                (base, vec![SubAction::Sow]),
-                            ]
-                        }
-                        ActionSpace::DriftMining => vec![
-                            (base.clone(), vec![SubAction::PlaceTile(TileGroup::Twin((Tile::Tunnel, Tile::Cave)))]),
-                            (base, vec![]),
-                        ],
-                        ActionSpace::Clearing | ActionSpace::Sustenance => {
-                            let tile = TileGroup::Twin((Tile::Meadow, Tile::Field((0, 0))));
-                            vec![
-                                (base.clone(), vec![SubAction::PlaceTile(tile)]),
-                                (base, vec![]),
-                            ]
-                        }
-                        ActionSpace::RubyMineConstruction => vec![
-                            (base.clone(), vec![SubAction::PlaceTile(TileGroup::Single(Tile::RubyMine))]),
-                            (base, vec![]),
-                        ],
-                        _ => vec![(base, vec![])],
-                    };
+                    let mut candidates = space.sub_actions(base, current);
 
                     // Filter candidates whose first sub-action has no valid moves
                     candidates.retain(|(c, stack)| {
