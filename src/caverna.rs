@@ -87,17 +87,6 @@ impl ActionSpace {
             _ => {}
         }
     }
-    fn gain_placement_resources(self, replaced: TileGroup, resources: &mut Resources) {
-        match self {
-            ActionSpace::OreMineConstruction => resources.coal += 3,
-            ActionSpace::RubyMineConstruction => {
-                if matches!(replaced, TileGroup::Single(Tile::DeepTunnel)) {
-                    resources.rubies += 1;
-                }
-            }
-            _ => {}
-        }
-    }
 }
 
 pub(crate) const HALF_WIDTH: usize = 3;
@@ -557,7 +546,7 @@ impl Player {
 #[derive(Clone)]
 pub(crate) enum SubAction {
     SelectActionSpace,
-    PlaceTile { space: ActionSpace, tile: TileGroup },
+    PlaceTile(TileGroup),
     Pasture,
     Stable,
     Furnish,
@@ -899,7 +888,7 @@ impl GameState for State {
                             let mut opts = vec![];
                             for tile in [TileGroup::Twin((Tile::Tunnel, Tile::Cave)), TileGroup::Twin((Tile::Cave, Tile::Cave))] {
                                 if !base.players[current].tile_placements(tile.clone()).is_empty() {
-                                    opts.push((base.clone(), vec![SubAction::PlaceTile { space, tile }]));
+                                    opts.push((base.clone(), vec![SubAction::PlaceTile(tile)]));
                                 }
                             }
                             opts
@@ -959,32 +948,32 @@ impl GameState for State {
                         ActionSpace::OreMineConstruction => {
                             let tile = TileGroup::Twin((Tile::DeepTunnel, Tile::OreMine));
                             if base.players[current].tile_placements(tile.clone()).is_empty() { vec![] }
-                            else { vec![(base, vec![SubAction::ExpeditionPick { space, picks_remaining: 1, used_items: 0 }, SubAction::PlaceTile { space, tile }])] }
+                            else { vec![(base, vec![SubAction::ExpeditionPick { space, picks_remaining: 1, used_items: 0 }, SubAction::PlaceTile(tile)])] }
                         }
                         ActionSpace::SlashAndBurn => {
                             let tile = TileGroup::Twin((Tile::Meadow, Tile::Field((0, 0))));
                             if base.players[current].tile_placements(tile.clone()).is_empty() { vec![] }
-                            else { vec![(base, vec![SubAction::Sow, SubAction::PlaceTile { space, tile }])] }
+                            else { vec![(base, vec![SubAction::Sow, SubAction::PlaceTile(tile)])] }
                         }
                         ActionSpace::DriftMining => {
                             let tile = TileGroup::Twin((Tile::Tunnel, Tile::Cave));
                             if base.players[current].tile_placements(tile.clone()).is_empty() { vec![] }
-                            else { vec![(base, vec![SubAction::PlaceTile { space, tile }])] }
+                            else { vec![(base, vec![SubAction::PlaceTile(tile)])] }
                         }
                         ActionSpace::Clearing => {
                             let tile = TileGroup::Twin((Tile::Meadow, Tile::Field((0, 0))));
                             if base.players[current].tile_placements(tile.clone()).is_empty() { vec![] }
-                            else { vec![(base, vec![SubAction::PlaceTile { space, tile }])] }
+                            else { vec![(base, vec![SubAction::PlaceTile(tile)])] }
                         }
                         ActionSpace::Sustenance => {
                             let tile = TileGroup::Twin((Tile::Meadow, Tile::Field((0, 0))));
                             if base.players[current].tile_placements(tile.clone()).is_empty() { vec![] }
-                            else { vec![(base, vec![SubAction::PlaceTile { space, tile }])] }
+                            else { vec![(base, vec![SubAction::PlaceTile(tile)])] }
                         }
                         ActionSpace::RubyMineConstruction => {
                             let tile = TileGroup::Single(Tile::RubyMine);
                             if base.players[current].tile_placements(tile.clone()).is_empty() { vec![] }
-                            else { vec![(base, vec![SubAction::PlaceTile { space, tile }])] }
+                            else { vec![(base, vec![SubAction::PlaceTile(tile)])] }
                         }
                         _ => vec![(base, vec![])],
                     };
@@ -1001,9 +990,8 @@ impl GameState for State {
                 children
             }
 
-            SubAction::PlaceTile { space, tile } => {
-                let space = *space;
-                let tile = tile.clone(); // clone before borrowing self for placements
+            SubAction::PlaceTile(tile) => {
+                let tile = tile.clone();
                 let placements = self.players[current].tile_placements(tile.clone());
                 if placements.is_empty() {
                     return vec![self.clone().pop_subaction()];
@@ -1013,7 +1001,14 @@ impl GameState for State {
                     let old_board = match side { Side::Outdoor => c.players[current].outdoor, Side::Indoor => c.players[current].indoor };
                     let replaced = board_delta(&old_board, &new_board);
                     let changed = changed_cells(&old_board, &new_board);
-                    space.gain_placement_resources(replaced, &mut c.players[current].resources);
+                    // Placement bonuses derived from what was placed and what it replaced
+                    let placed: Vec<Tile> = changed.iter().map(|&(x, y)| new_board[y][x]).collect();
+                    if placed.iter().any(|&t| t == Tile::OreMine) {
+                        c.players[current].resources.coal += 3;
+                    }
+                    if placed.iter().any(|&t| t == Tile::RubyMine) && matches!(replaced, TileGroup::Single(Tile::DeepTunnel)) {
+                        c.players[current].resources.rubies += 1;
+                    }
                     for pos in changed {
                         let p = &mut c.players[current];
                         match side {
