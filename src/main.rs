@@ -4,7 +4,7 @@ mod mcts;
 mod test_caverna;
 
 use crate::{
-    caverna::{ActionSpace, Phase, Player, Resources, State, Tile, BOARD_HEIGHT},
+    caverna::{ActionSpace, Phase, SubAction, Player, Resources, State, Tile, BOARD_HEIGHT},
     mcts::{random_move, search, GameState},
 };
 use rand::SeedableRng;
@@ -105,8 +105,9 @@ fn describe_move(state: &State, next: &State) -> String {
 
     let gains = if parts.is_empty() { String::new() } else { format!(" ({})", parts.join(", ")) };
 
-    match &state.phase {
-        Phase::Placement => {
+    let Phase::Acting(ref stack) = state.phase;
+    match stack.last() {
+        Some(SubAction::SelectActionSpace) => {
             let space = p_new.dwarfs.iter().zip(p_old.dwarfs.iter())
                 .find_map(|(nd, od)| {
                     if nd.placed_on.is_some() && od.placed_on.is_none() { nd.placed_on } else { None }
@@ -114,14 +115,16 @@ fn describe_move(state: &State, next: &State) -> String {
             let space_str = space.map_or("?".to_string(), |s| format!("{}", s));
             format!("{}{}", space_str, gains)
         }
-        Phase::Expedition { .. } => {
+        Some(SubAction::ExpeditionPick { .. }) => {
             if parts.is_empty() { "expedition pass".to_string() }
             else { format!("expedition pick{}", gains) }
         }
-        Phase::Trading => {
-            if next.round > state.round || parts.is_empty() { "done trading".to_string() }
-            else { format!("trade{}", gains) }
-        }
+        Some(SubAction::PlaceTile { .. }) => format!("place tile{}", gains),
+        Some(SubAction::Pasture)           => format!("pasture{}", gains),
+        Some(SubAction::Stable)            => format!("stable{}", gains),
+        Some(SubAction::Furnish)           => format!("furnish{}", gains),
+        Some(SubAction::Sow)               => format!("sow{}", gains),
+        None => "?".to_string(),
     }
 }
 

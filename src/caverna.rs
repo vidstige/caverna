@@ -53,24 +53,6 @@ impl ActionSpace {
         ActionSpace::Adventure,
     ];
 
-    fn picks_per_expedition(self) -> usize {
-        match self {
-            ActionSpace::Logging => 1,
-            ActionSpace::OreMineConstruction => 2,
-            ActionSpace::Blacksmithing => 3,
-            ActionSpace::Adventure => 1,
-            _ => 0,
-        }
-    }
-
-    fn expedition_count(self) -> usize {
-        match self {
-            ActionSpace::Logging | ActionSpace::OreMineConstruction | ActionSpace::Blacksmithing => 1,
-            ActionSpace::Adventure => 2,
-            _ => 0,
-        }
-    }
-
     fn gain_resources(self, rounds: u32, resources: &mut Resources) {
         let r = rounds as usize;
         match self {
@@ -114,25 +96,6 @@ impl ActionSpace {
                 }
             }
             _ => {}
-        }
-    }
-    fn place_tile(self) -> Vec<TileGroup> {
-        match self {
-            ActionSpace::Clearing | ActionSpace::Sustenance | ActionSpace::SlashAndBurn =>
-                vec![TileGroup::Twin((Tile::Meadow, Tile::Field((0, 0))))],
-            ActionSpace::DriftMining =>
-                vec![TileGroup::Twin((Tile::Tunnel, Tile::Cave))],
-            ActionSpace::Excavation =>
-                vec![TileGroup::Twin((Tile::Tunnel, Tile::Cave)), TileGroup::Twin((Tile::Cave, Tile::Cave))],
-            ActionSpace::OreMineConstruction =>
-                vec![TileGroup::Twin((Tile::DeepTunnel, Tile::OreMine))],
-            ActionSpace::RubyMineConstruction =>
-                vec![TileGroup::Single(Tile::RubyMine)],
-            ActionSpace::SheepFarming | ActionSpace::DonkeyFarming
-            | ActionSpace::Blacksmithing | ActionSpace::Adventure
-            | ActionSpace::OreMining | ActionSpace::RubyMining
-            | ActionSpace::OreDelivery | ActionSpace::RubyDelivery => vec![],
-            _ => vec![],
         }
     }
 }
@@ -332,11 +295,9 @@ const FURNISHINGS: &[Furnishing] = &[
 ];
 
 // Only dwelling-type furnishings (used by WishForChildren, which cannot furnish other cave types)
-const DWELLING_FURNISHINGS: &[Furnishing] = &[
-    Furnishing { tile: Tile::Dwelling, cost_wood: 4, cost_stone: 3, max_count: 16 },
-];
 
-enum TileGroup {
+#[derive(Clone)]
+pub(crate) enum TileGroup {
     Single(Tile),
     Twin((Tile, Tile)),
 }
@@ -593,11 +554,20 @@ impl Player {
 
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
+pub(crate) enum SubAction {
+    SelectActionSpace,
+    PlaceTile { space: ActionSpace, tile: TileGroup },
+    Pasture,
+    Stable,
+    Furnish,
+    Sow,
+    ExpeditionPick { space: ActionSpace, picks_remaining: usize, used_items: u16 },
+}
+
+#[derive(Clone)]
 pub(crate) enum Phase {
-    Placement,
-    Expedition { space: ActionSpace, remaining_picks: usize, remaining_expeditions: usize, used_items: u16 },
-    Trading,
+    Acting(Vec<SubAction>),
 }
 
 #[derive(Clone)]
@@ -615,7 +585,7 @@ impl State {
         for _ in 0..count {
             players.push(Player::new(2));
         }
-        State { players, round: 0, starting_player: 0, accumulated: [0u32; ActionSpace::COUNT], current_player: 0, phase: Phase::Placement }
+        State { players, round: 0, starting_player: 0, accumulated: [0u32; ActionSpace::COUNT], current_player: 0, phase: Phase::Acting(vec![SubAction::SelectActionSpace]) }
     }
     fn rounds(&self) -> u32 {
         match self.players.len() {
@@ -673,6 +643,33 @@ impl State {
             }
         }
         None
+    }
+
+    fn advance_turn(mut self) -> Self {
+        match self.next_placement_player() {
+            Some(p) => {
+                self.current_player = p;
+                self.phase = Phase::Acting(vec![SubAction::SelectActionSpace]);
+            }
+            None => {
+                self.replenish();
+                self.return_dwarfs();
+                self.harvest();
+                self.grow_children();
+                self.round += 1;
+                self.current_player = self.starting_player as usize;
+                self.phase = Phase::Acting(vec![SubAction::SelectActionSpace]);
+            }
+        }
+        self
+    }
+
+    fn pop_subaction(mut self) -> Self {
+        let Phase::Acting(ref mut s) = self.phase;
+        s.pop();
+        let Phase::Acting(ref s) = self.phase;
+        if s.is_empty() { return self.advance_turn(); }
+        self
     }
 
 
@@ -744,9 +741,10 @@ impl State {
         results
     }
 
-    fn expedition_options(&self, player_idx: usize, weapon: u8, used_items: u16) -> Vec<(Self, u16)> {
+    // Returns (new_state, item_bit, needs_furnish_subaction)
+    fn expedition_options(&self, player_idx: usize, weapon: u8, used_items: u16) -> Vec<(Self, u16, bool)> {
         if weapon == 0 {
-            return vec![(self.clone(), 0)];
+            return vec![(self.clone(), 0, false)];
         }
         // Item indices: 0 reserved (future lvl-1 item), then pairs per level:
         //   lvl 1 → 1,2 | lvl 2 → 3,4 | lvl 3 → 5,6 | lvl 4 → 7,8
@@ -756,51 +754,43 @@ impl State {
         let avail = |i: usize| weapon >= min_weapon(i) && used_items & (1 << i) == 0;
         let mut results = vec![];
         // Level 1 (indices 1, 2)
-        if avail(1) { let mut c = self.clone(); c.players[player_idx].resources.wood += 1; results.push((c, 1u16 << 1)); }
-        if avail(2) { let mut c = self.clone(); c.players[player_idx].dogs += 1; results.push((c, 1u16 << 2)); }
+        if avail(1) { let mut c = self.clone(); c.players[player_idx].resources.wood += 1; results.push((c, 1u16 << 1, false)); }
+        if avail(2) { let mut c = self.clone(); c.players[player_idx].dogs += 1; results.push((c, 1u16 << 2, false)); }
         // Level 2 (indices 3, 4)
-        if avail(3) { let mut c = self.clone(); c.players[player_idx].resources.wheat += 1; results.push((c, 1u16 << 3)); }
-        if avail(4) { let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Sheep as usize] += 1; results.push((c, 1u16 << 4)); }
+        if avail(3) { let mut c = self.clone(); c.players[player_idx].resources.wheat += 1; results.push((c, 1u16 << 3, false)); }
+        if avail(4) { let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Sheep as usize] += 1; results.push((c, 1u16 << 4, false)); }
         // Level 3 (indices 5, 6)
-        if avail(5) { let mut c = self.clone(); c.players[player_idx].resources.stone += 1; results.push((c, 1u16 << 5)); }
-        if avail(6) { let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Donkey as usize] += 1; results.push((c, 1u16 << 6)); }
+        if avail(5) { let mut c = self.clone(); c.players[player_idx].resources.stone += 1; results.push((c, 1u16 << 5, false)); }
+        if avail(6) { let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Donkey as usize] += 1; results.push((c, 1u16 << 6, false)); }
         // Level 4 (indices 7, 8)
-        if avail(7) { let mut c = self.clone(); c.players[player_idx].resources.vegetables += 1; results.push((c, 1u16 << 7)); }
-        if avail(8) { let mut c = self.clone(); c.players[player_idx].resources.coal += 2; results.push((c, 1u16 << 8)); }
+        if avail(7) { let mut c = self.clone(); c.players[player_idx].resources.vegetables += 1; results.push((c, 1u16 << 7, false)); }
+        if avail(8) { let mut c = self.clone(); c.players[player_idx].resources.coal += 2; results.push((c, 1u16 << 8, false)); }
         // Level 5 (indices 9, 10)
-        if avail(9) { let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Boar as usize] += 1; results.push((c, 1u16 << 9)); }
+        if avail(9) { let mut c = self.clone(); c.players[player_idx].animals[AnimalType::Boar as usize] += 1; results.push((c, 1u16 << 9, false)); }
         // Level 6 (indices 11, 12)
-        if avail(11) { let mut c = self.clone(); c.players[player_idx].resources.gold += 2; results.push((c, 1u16 << 11)); }
-        // Level 7 (indices 13, 14)
-        if avail(13) {
-            for c in self.furnish_cave_options(player_idx, FURNISHINGS) {
-                results.push((c, 1u16 << 13));
-            }
+        if avail(11) { let mut c = self.clone(); c.players[player_idx].resources.gold += 2; results.push((c, 1u16 << 11, false)); }
+        // Level 7 (index 13): push Furnish sub-action rather than inlining
+        if avail(13) && !self.furnish_cave_options(player_idx).is_empty() {
+            results.push((self.clone(), 1u16 << 13, true));
         }
         // Weapon > 0 but all reachable items already picked — pass through with no reward
-        if results.is_empty() { results.push((self.clone(), 0)); }
+        if results.is_empty() { results.push((self.clone(), 0, false)); }
         results
     }
 
-    fn furnish_cave_options(&self, player_idx: usize, furnishings: &[Furnishing]) -> Vec<Self> {
+    fn furnish_cave_options(&self, player_idx: usize) -> Vec<Self> {
         let p = &self.players[player_idx];
         let mut opts = vec![];
         for y in 0..BOARD_HEIGHT {
             for x in 0..HALF_WIDTH {
-                if p.indoor[y][x] != Tile::Cave {
-                    continue;
-                }
-                for f in furnishings {
-                    if p.resources.wood < f.cost_wood || p.resources.stone < f.cost_stone {
-                        continue;
-                    }
+                if p.indoor[y][x] != Tile::Cave { continue; }
+                for f in FURNISHINGS {
+                    if p.resources.wood < f.cost_wood || p.resources.stone < f.cost_stone { continue; }
                     let used = self.players.iter()
                         .flat_map(|pl| pl.indoor.iter().flatten())
                         .filter(|&&t| t == f.tile)
                         .count();
-                    if used >= f.max_count {
-                        continue;
-                    }
+                    if used >= f.max_count { continue; }
                     let mut c = self.clone();
                     c.players[player_idx].resources.wood -= f.cost_wood;
                     c.players[player_idx].resources.stone -= f.cost_stone;
@@ -872,23 +862,16 @@ impl State {
 }
 
 impl GameState for State {
-    fn current_player(&self) -> usize {
-        self.current_player
-    }
-
-    fn num_players(&self) -> usize {
-        self.players.len()
-    }
+    fn current_player(&self) -> usize { self.current_player }
+    fn num_players(&self) -> usize { self.players.len() }
 
     fn children<R: rand::prelude::Rng>(&self, _rng: &mut R) -> Vec<Self> {
-        if self.done() {
-            return vec![];
-        }
-
+        if self.done() { return vec![]; }
+        let Phase::Acting(ref stack) = self.phase;
         let current = self.current_player;
 
-        match self.phase {
-            Phase::Placement => {
+        match stack.last().expect("phase stack is empty") {
+            SubAction::SelectActionSpace => {
                 let mut children = vec![];
                 for &space in &ActionSpace::ALL {
                     if !self.space_available(space) { continue; }
@@ -896,312 +879,219 @@ impl GameState for State {
                         .any(|p| p.dwarfs.iter().any(|d| d.placed_on == Some(space)));
                     if occupied { continue; }
 
-                    let mut child = self.clone();
-                    child.players[current].dwarfs.iter_mut()
+                    // Place dwarf and apply immediate gains
+                    let mut base = self.clone();
+                    base.players[current].dwarfs.iter_mut()
                         .filter(|d| d.placed_on.is_none())
                         .min_by_key(|d| d.weapon)
-                        .expect("current player has no unplaced dwarf")
+                        .expect("no unplaced dwarf")
                         .placed_on = Some(space);
-                    space.gain_resources(child.accumulated[space as usize], &mut child.players[current].resources);
-                    space.gain_animals(child.accumulated[space as usize], &mut child.players[current].animals);
-                    if space == ActionSpace::StartingPlayer {
-                        child.starting_player = current as u8;
-                    }
-                    if space == ActionSpace::OreMining || space == ActionSpace::OreDelivery {
-                        let mines = child.players[current].indoor.iter().flatten()
-                            .filter(|&&t| t == Tile::OreMine).count();
-                        child.players[current].resources.coal += mines * 2;
+                    space.gain_resources(base.accumulated[space as usize], &mut base.players[current].resources);
+                    space.gain_animals(base.accumulated[space as usize], &mut base.players[current].animals);
+                    if space == ActionSpace::StartingPlayer { base.starting_player = current as u8; }
+                    if matches!(space, ActionSpace::OreMining | ActionSpace::OreDelivery) {
+                        let mines = base.players[current].indoor.iter().flatten().filter(|&&t| t == Tile::OreMine).count();
+                        base.players[current].resources.coal += mines * 2;
                     }
                     if space == ActionSpace::RubyMining {
-                        let has_mine = child.players[current].indoor.iter().flatten()
-                            .any(|&t| t == Tile::RubyMine);
-                        if has_mine { child.players[current].resources.rubies += 1; }
+                        if base.players[current].indoor.iter().flatten().any(|&t| t == Tile::RubyMine) {
+                            base.players[current].resources.rubies += 1;
+                        }
                     }
                     if space == ActionSpace::RubyDelivery {
-                        let mines = child.players[current].indoor.iter().flatten()
-                            .filter(|&&t| t == Tile::RubyMine).count();
-                        if mines >= 2 { child.players[current].resources.rubies += 1; }
+                        let mines = base.players[current].indoor.iter().flatten().filter(|&&t| t == Tile::RubyMine).count();
+                        if mines >= 2 { base.players[current].resources.rubies += 1; }
                     }
+                    if space == ActionSpace::Housework { base.players[current].dogs += 1; }
 
-                    let next = child.next_placement_player();
-
-                    let tile_choices = space.place_tile();
-                    let mut candidates = if tile_choices.is_empty() {
-                        vec![child]
-                    } else {
-                        tile_choices.into_iter().flat_map(|tile| {
-                            let placements = child.players[current].tile_placements(tile);
-                            if placements.is_empty() {
-                                vec![]
-                            } else {
-                                placements.into_iter().map(|(side, new_board)| {
-                                    let mut c = child.clone();
-                                    let (replaced, changed) = match side {
-                                        Side::Outdoor => (
-                                            board_delta(&child.players[current].outdoor, &new_board),
-                                            changed_cells(&child.players[current].outdoor, &new_board),
-                                        ),
-                                        Side::Indoor => (
-                                            board_delta(&child.players[current].indoor, &new_board),
-                                            changed_cells(&child.players[current].indoor, &new_board),
-                                        ),
-                                    };
-                                    space.gain_placement_resources(replaced, &mut c.players[current].resources);
-                                    for pos in changed {
-                                        let p = &mut c.players[current];
-                                        match side {
-                                            Side::Outdoor => apply_outdoor_location_bonus(pos, &mut p.resources, &mut p.animals),
-                                            Side::Indoor  => apply_indoor_location_bonus(pos, &mut p.resources, &mut p.animals),
-                                        }
-                                    }
-                                    match side {
-                                        Side::Outdoor => c.players[current].outdoor = new_board,
-                                        Side::Indoor  => c.players[current].indoor  = new_board,
-                                    }
-                                    c
-                                }).collect()
+                    // Build (state, sub_stack) candidates; stack vec: last = current (first to execute)
+                    let candidates: Vec<(Self, Vec<SubAction>)> = match space {
+                        ActionSpace::Excavation => {
+                            let mut opts = vec![];
+                            for tile in [TileGroup::Twin((Tile::Tunnel, Tile::Cave)), TileGroup::Twin((Tile::Cave, Tile::Cave))] {
+                                if !base.players[current].tile_placements(tile.clone()).is_empty() {
+                                    opts.push((base.clone(), vec![SubAction::PlaceTile { space, tile }]));
+                                }
                             }
-                        }).collect()
+                            opts
+                        }
+                        ActionSpace::Blacksmithing => {
+                            base.forge_options(current, space).into_iter()
+                                .map(|c| (c, vec![SubAction::ExpeditionPick { space, picks_remaining: 3, used_items: 0 }]))
+                                .collect()
+                        }
+                        ActionSpace::Adventure => {
+                            let exp_stack = vec![
+                                SubAction::ExpeditionPick { space, picks_remaining: 1, used_items: 0 },
+                                SubAction::ExpeditionPick { space, picks_remaining: 1, used_items: 0 },
+                            ];
+                            let armed = base.players[current].dwarfs.iter()
+                                .find(|d| d.placed_on == Some(space))
+                                .map_or(false, |d| d.weapon > 0);
+                            if armed {
+                                vec![(base, exp_stack)]
+                            } else {
+                                let mut opts = vec![(base.clone(), exp_stack.clone())];
+                                opts.extend(base.forge_options(current, space).into_iter().map(|c| (c, exp_stack.clone())));
+                                opts
+                            }
+                        }
+                        ActionSpace::WishForChildren => {
+                            let mut opts = vec![];
+                            if let Some(grown) = base.family_growth_option(current) {
+                                opts.push((grown, vec![]));
+                            }
+                            if !base.furnish_cave_options(current).is_empty() {
+                                opts.push((base, vec![SubAction::Furnish]));
+                            }
+                            opts
+                        }
+                        ActionSpace::FamilyLife => {
+                            let mut opts = vec![];
+                            if let Some(grown) = base.family_growth_option(current) {
+                                opts.push((grown.clone(), vec![]));
+                                if !grown.sow_options(current).is_empty() {
+                                    opts.push((grown, vec![SubAction::Sow]));
+                                }
+                            }
+                            if !base.sow_options(current).is_empty() {
+                                opts.push((base, vec![SubAction::Sow]));
+                            }
+                            opts
+                        }
+                        ActionSpace::SheepFarming | ActionSpace::DonkeyFarming =>
+                            vec![(base, vec![SubAction::Stable, SubAction::Pasture])],
+                        ActionSpace::Housework => {
+                            let stack = if base.furnish_cave_options(current).is_empty() { vec![] } else { vec![SubAction::Furnish] };
+                            vec![(base, stack)]
+                        }
+                        ActionSpace::Logging =>
+                            vec![(base, vec![SubAction::ExpeditionPick { space, picks_remaining: 1, used_items: 0 }])],
+                        ActionSpace::OreMineConstruction => {
+                            let tile = TileGroup::Twin((Tile::DeepTunnel, Tile::OreMine));
+                            if base.players[current].tile_placements(tile.clone()).is_empty() { vec![] }
+                            else { vec![(base, vec![SubAction::ExpeditionPick { space, picks_remaining: 1, used_items: 0 }, SubAction::PlaceTile { space, tile }])] }
+                        }
+                        ActionSpace::SlashAndBurn => {
+                            let tile = TileGroup::Twin((Tile::Meadow, Tile::Field((0, 0))));
+                            if base.players[current].tile_placements(tile.clone()).is_empty() { vec![] }
+                            else { vec![(base, vec![SubAction::Sow, SubAction::PlaceTile { space, tile }])] }
+                        }
+                        ActionSpace::DriftMining => {
+                            let tile = TileGroup::Twin((Tile::Tunnel, Tile::Cave));
+                            if base.players[current].tile_placements(tile.clone()).is_empty() { vec![] }
+                            else { vec![(base, vec![SubAction::PlaceTile { space, tile }])] }
+                        }
+                        ActionSpace::Clearing => {
+                            let tile = TileGroup::Twin((Tile::Meadow, Tile::Field((0, 0))));
+                            if base.players[current].tile_placements(tile.clone()).is_empty() { vec![] }
+                            else { vec![(base, vec![SubAction::PlaceTile { space, tile }])] }
+                        }
+                        ActionSpace::Sustenance => {
+                            let tile = TileGroup::Twin((Tile::Meadow, Tile::Field((0, 0))));
+                            if base.players[current].tile_placements(tile.clone()).is_empty() { vec![] }
+                            else { vec![(base, vec![SubAction::PlaceTile { space, tile }])] }
+                        }
+                        ActionSpace::RubyMineConstruction => {
+                            let tile = TileGroup::Single(Tile::RubyMine);
+                            if base.players[current].tile_placements(tile.clone()).is_empty() { vec![] }
+                            else { vec![(base, vec![SubAction::PlaceTile { space, tile }])] }
+                        }
+                        _ => vec![(base, vec![])],
                     };
 
-                    if space == ActionSpace::Blacksmithing {
-                        candidates = candidates.into_iter()
-                            .flat_map(|c| c.forge_options(current, space))
-                            .collect();
-                    }
-                    if space == ActionSpace::Adventure {
-                        candidates = candidates.into_iter()
-                            .flat_map(|c| {
-                                let armed = c.players[current].dwarfs.iter()
-                                    .find(|d| d.placed_on == Some(space))
-                                    .map_or(false, |d| d.weapon > 0);
-                                if armed {
-                                    vec![c]
-                                } else {
-                                    let mut opts = vec![c.clone()];
-                                    opts.extend(c.forge_options(current, space));
-                                    opts
-                                }
-                            })
-                            .collect();
-                    }
-
-                    if space == ActionSpace::Housework {
-                        for c in &mut candidates {
-                            c.players[current].dogs += 1;
-                        }
-                        candidates = candidates.into_iter()
-                            .flat_map(|c| {
-                                let opts = c.furnish_cave_options(current, FURNISHINGS);
-                                if opts.is_empty() { vec![c] } else { opts }
-                            })
-                            .collect();
-                    }
-
-                    if space == ActionSpace::WishForChildren {
-                        candidates = candidates.into_iter()
-                            .flat_map(|c| {
-                                let mut opts = vec![];
-                                if let Some(grown) = c.family_growth_option(current) {
-                                    opts.push(grown);
-                                }
-                                opts.extend(c.furnish_cave_options(current, DWELLING_FURNISHINGS));
-                                opts
-                            })
-                            .collect();
-                    }
-
-                    if space == ActionSpace::FamilyLife {
-                        candidates = candidates.into_iter()
-                            .flat_map(|c| {
-                                let mut opts: Vec<Self> = vec![];
-                                if let Some(grown) = c.family_growth_option(current) {
-                                    opts.push(grown.clone()); // grow only
-                                    opts.extend(grown.sow_options(current)); // grow + sow
-                                }
-                                opts.extend(c.sow_options(current)); // sow only (empty if nothing to sow)
-                                opts
-                            })
-                            .collect();
-                    }
-
-                    if space == ActionSpace::SlashAndBurn {
-                        candidates = candidates.into_iter()
-                            .flat_map(|c| {
-                                let sow = c.sow_options(current);
-                                if sow.is_empty() { vec![c] } else { sow }
-                            })
-                            .collect();
-                    }
-
-                    if matches!(space, ActionSpace::SheepFarming | ActionSpace::DonkeyFarming) {
-                        candidates = candidates.into_iter()
-                            .flat_map(|c| c.pasture_options(current))
-                            .flat_map(|c| c.stable_options(current))
-                            .collect();
-                    }
-
-                    let expeditions = space.expedition_count();
-
-                    for c in &mut candidates {
-                        if expeditions > 0 {
-                            c.phase = Phase::Expedition { space, remaining_picks: space.picks_per_expedition(), remaining_expeditions: expeditions, used_items: 0 };
+                    for (mut c, sub_stack) in candidates {
+                        if sub_stack.is_empty() {
+                            c = c.advance_turn();
                         } else {
-                            match next {
-                                Some(p) => c.current_player = p,
-                                None => { c.phase = Phase::Trading; c.current_player = 0; }
-                            }
+                            c.phase = Phase::Acting(sub_stack);
                         }
+                        children.push(c);
                     }
-
-                    children.extend(candidates);
                 }
                 children
             }
 
-            Phase::Expedition { space, remaining_picks, remaining_expeditions, used_items } => {
+            SubAction::PlaceTile { space, tile } => {
+                let space = *space;
+                let tile = tile.clone();
+                let placements = self.players[current].tile_placements(tile.clone());
+                if placements.is_empty() {
+                    return vec![self.clone().pop_subaction()];
+                }
+                placements.into_iter().map(|(side, new_board)| {
+                    let mut c = self.clone();
+                    let old_board = match side { Side::Outdoor => c.players[current].outdoor, Side::Indoor => c.players[current].indoor };
+                    let replaced = board_delta(&old_board, &new_board);
+                    let changed = changed_cells(&old_board, &new_board);
+                    space.gain_placement_resources(replaced, &mut c.players[current].resources);
+                    for pos in changed {
+                        let p = &mut c.players[current];
+                        match side {
+                            Side::Outdoor => apply_outdoor_location_bonus(pos, &mut p.resources, &mut p.animals),
+                            Side::Indoor  => apply_indoor_location_bonus(pos, &mut p.resources, &mut p.animals),
+                        }
+                    }
+                    match side { Side::Outdoor => c.players[current].outdoor = new_board, Side::Indoor => c.players[current].indoor = new_board }
+                    c.pop_subaction()
+                }).collect()
+            }
+
+            SubAction::Pasture =>
+                self.pasture_options(current).into_iter().map(|c| c.pop_subaction()).collect(),
+
+            SubAction::Stable =>
+                self.stable_options(current).into_iter().map(|c| c.pop_subaction()).collect(),
+
+            SubAction::Furnish => {
+                let opts = self.furnish_cave_options(current);
+                if opts.is_empty() { vec![self.clone().pop_subaction()] }
+                else { opts.into_iter().map(|c| c.pop_subaction()).collect() }
+            }
+
+            SubAction::Sow => {
+                let opts = self.sow_options(current);
+                if opts.is_empty() { vec![self.clone().pop_subaction()] }
+                else { opts.into_iter().map(|c| c.pop_subaction()).collect() }
+            }
+
+            SubAction::ExpeditionPick { space, picks_remaining, used_items } => {
+                let space = *space;
+                let picks_remaining = *picks_remaining;
+                let used_items = *used_items;
                 let weapon = self.players[current].dwarfs.iter()
                     .find(|d| d.placed_on == Some(space))
-                    .map(|d| d.weapon)
-                    .unwrap_or(0);
+                    .map(|d| d.weapon).unwrap_or(0);
                 self.expedition_options(current, weapon, used_items)
                     .into_iter()
-                    .map(|(mut c, item_bit)| {
-                        let new_used = used_items | item_bit;
-                        if remaining_picks == 1 {
-                            if remaining_expeditions == 1 {
-                                if let Some(d) = c.players[current].dwarfs.iter_mut()
-                                    .find(|d| d.placed_on == Some(space))
-                                {
+                    .map(|(state, item_bit, needs_furnish)| {
+                        let mut c = state;
+                        { let Phase::Acting(ref mut s) = c.phase; s.pop(); }
+                        if picks_remaining > 1 {
+                            let Phase::Acting(ref mut s) = c.phase;
+                            s.push(SubAction::ExpeditionPick { space, picks_remaining: picks_remaining - 1, used_items: used_items | item_bit });
+                        } else {
+                            // Last pick of this expedition: upgrade weapon if no more for this space
+                            let has_more = { let Phase::Acting(ref s) = c.phase; s.iter().any(|a| matches!(a, SubAction::ExpeditionPick { space: s2, .. } if *s2 == space)) };
+                            if !has_more {
+                                if let Some(d) = c.players[current].dwarfs.iter_mut().find(|d| d.placed_on == Some(space)) {
                                     if d.weapon > 0 { d.weapon = d.weapon.saturating_add(1); }
                                 }
-                                match c.next_placement_player() {
-                                    Some(p) => { c.phase = Phase::Placement; c.current_player = p; }
-                                    None    => { c.phase = Phase::Trading;   c.current_player = 0; }
-                                }
-                            } else {
-                                c.phase = Phase::Expedition { space, remaining_picks: space.picks_per_expedition(), remaining_expeditions: remaining_expeditions - 1, used_items: 0 };
                             }
-                        } else {
-                            c.phase = Phase::Expedition { space, remaining_picks: remaining_picks - 1, remaining_expeditions, used_items: new_used };
                         }
+                        if needs_furnish && !c.furnish_cave_options(current).is_empty() {
+                            let Phase::Acting(ref mut s) = c.phase; s.push(SubAction::Furnish);
+                        }
+                        { let Phase::Acting(ref s) = c.phase; if s.is_empty() { return c.advance_turn(); } }
                         c
                     })
                     .collect()
-            }
-
-            Phase::Trading => {
-                let food_needed = self.players[current].food_needed();
-                let mut children = vec![];
-
-                // "Done trading" — advance to next player or execute harvest
-                let mut done = self.clone();
-                if current + 1 < self.players.len() {
-                    done.current_player = current + 1;
-                } else {
-                    done.replenish();
-                    done.return_dwarfs();
-                    done.harvest();
-                    done.grow_children();
-                    done.round += 1;
-                    done.current_player = done.starting_player as usize;
-                    done.phase = Phase::Placement;
-                }
-                children.push(done);
-
-                // Trade actions — only offered when more food is needed.
-                // For each resource, offer 1..=n units where n covers the gap
-                // (ceiling division, so multi-food trades may overshoot by a little).
-                let p = &self.players[current];
-                let food_gap = food_needed.saturating_sub(p.resources.food);
-
-                if food_gap > 0 {
-                    let sheep  = p.animals[AnimalType::Sheep  as usize];
-                    let boar   = p.animals[AnimalType::Boar   as usize];
-                    let cow    = p.animals[AnimalType::Cow    as usize];
-                    let donkey = p.animals[AnimalType::Donkey as usize];
-                    let wheat  = p.resources.wheat;
-                    let veg    = p.resources.vegetables;
-                    let rubies = p.resources.rubies;
-
-                    // 1 sheep → 1 food
-                    for n in 1..=sheep.min(food_gap) {
-                        let mut c = self.clone();
-                        c.players[current].animals[AnimalType::Sheep as usize] -= n;
-                        c.players[current].resources.food += n;
-                        children.push(c);
-                    }
-
-                    // 1 boar → 2 food
-                    for n in 1..=boar.min((food_gap + 1) / 2) {
-                        let mut c = self.clone();
-                        c.players[current].animals[AnimalType::Boar as usize] -= n;
-                        c.players[current].resources.food += n * 2;
-                        children.push(c);
-                    }
-
-                    // 1 cow → 3 food
-                    for n in 1..=cow.min((food_gap + 2) / 3) {
-                        let mut c = self.clone();
-                        c.players[current].animals[AnimalType::Cow as usize] -= n;
-                        c.players[current].resources.food += n * 3;
-                        children.push(c);
-                    }
-
-                    // 1 donkey → 1 food (only when no pair trade is possible)
-                    if donkey == 1 {
-                        let mut c = self.clone();
-                        c.players[current].animals[AnimalType::Donkey as usize] -= 1;
-                        c.players[current].resources.food += 1;
-                        children.push(c);
-                    }
-
-                    // 2 donkeys → 3 food (bulk rate)
-                    for n in 1..=(donkey / 2).min((food_gap + 2) / 3) {
-                        let mut c = self.clone();
-                        c.players[current].animals[AnimalType::Donkey as usize] -= n * 2;
-                        c.players[current].resources.food += n * 3;
-                        children.push(c);
-                    }
-
-                    // 1 wheat → 1 food
-                    for n in 1..=wheat.min(food_gap) {
-                        let mut c = self.clone();
-                        c.players[current].resources.wheat -= n;
-                        c.players[current].resources.food += n;
-                        children.push(c);
-                    }
-
-                    // 1 vegetable → 2 food
-                    for n in 1..=veg.min((food_gap + 1) / 2) {
-                        let mut c = self.clone();
-                        c.players[current].resources.vegetables -= n;
-                        c.players[current].resources.food += n * 2;
-                        children.push(c);
-                    }
-
-                    // 1 ruby → 2 food
-                    for n in 1..=rubies.min((food_gap + 1) / 2) {
-                        let mut c = self.clone();
-                        c.players[current].resources.rubies -= n;
-                        c.players[current].resources.food += n * 2;
-                        children.push(c);
-                    }
-                }
-
-                children
             }
         }
     }
 
     fn winner(&self) -> Option<usize> {
-        if !self.done() {
-            return None;
-        }
-        self.players.iter()
-            .enumerate()
-            .max_by_key(|(_, p)| p.points())
-            .map(|(i, _)| i)
+        if !self.done() { return None; }
+        self.players.iter().enumerate().max_by_key(|(_, p)| p.points()).map(|(i, _)| i)
     }
-
 }
