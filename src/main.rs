@@ -4,7 +4,7 @@ mod mcts;
 mod test_caverna;
 
 use crate::{
-    caverna::{ActionSpace, Phase, SubAction, Player, Resources, State, Tile, BOARD_HEIGHT},
+    caverna::{ActionSpace, SubAction, Player, Resources, State, Tile, BOARD_HEIGHT},
     mcts::{random_move, search, GameState},
 };
 use rand::SeedableRng;
@@ -105,8 +105,7 @@ fn describe_move(state: &State, next: &State) -> String {
 
     let gains = if parts.is_empty() { String::new() } else { format!(" ({})", parts.join(", ")) };
 
-    let Phase::Acting(ref stack) = state.phase;
-    match stack.last() {
+    match state.pending.last() {
         Some(SubAction::SelectActionSpace) => {
             let space = p_new.dwarfs.iter().zip(p_old.dwarfs.iter())
                 .find_map(|(nd, od)| {

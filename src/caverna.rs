@@ -566,18 +566,13 @@ pub(crate) enum SubAction {
 }
 
 #[derive(Clone)]
-pub(crate) enum Phase {
-    Acting(Vec<SubAction>),
-}
-
-#[derive(Clone)]
 pub struct State {
     pub players: Vec<Player>,
     pub round: u32,
     pub starting_player: u8,
     pub accumulated: [u32; ActionSpace::COUNT],
     pub(crate) current_player: usize,
-    pub(crate) phase: Phase,
+    pub(crate) pending: Vec<SubAction>,
 }
 impl State {
     pub fn new(count: u32) -> Self {
@@ -585,7 +580,7 @@ impl State {
         for _ in 0..count {
             players.push(Player::new(2));
         }
-        State { players, round: 0, starting_player: 0, accumulated: [0u32; ActionSpace::COUNT], current_player: 0, phase: Phase::Acting(vec![SubAction::SelectActionSpace]) }
+        State { players, round: 0, starting_player: 0, accumulated: [0u32; ActionSpace::COUNT], current_player: 0, pending: vec![SubAction::SelectActionSpace] }
     }
     fn rounds(&self) -> u32 {
         match self.players.len() {
@@ -647,10 +642,7 @@ impl State {
 
     fn advance_turn(mut self) -> Self {
         match self.next_placement_player() {
-            Some(p) => {
-                self.current_player = p;
-                self.phase = Phase::Acting(vec![SubAction::SelectActionSpace]);
-            }
+            Some(p) => { self.current_player = p; }
             None => {
                 self.replenish();
                 self.return_dwarfs();
@@ -658,17 +650,15 @@ impl State {
                 self.grow_children();
                 self.round += 1;
                 self.current_player = self.starting_player as usize;
-                self.phase = Phase::Acting(vec![SubAction::SelectActionSpace]);
             }
         }
+        self.pending = vec![SubAction::SelectActionSpace];
         self
     }
 
     fn pop_subaction(mut self) -> Self {
-        let Phase::Acting(ref mut s) = self.phase;
-        s.pop();
-        let Phase::Acting(ref s) = self.phase;
-        if s.is_empty() { return self.advance_turn(); }
+        self.pending.pop();
+        if self.pending.is_empty() { return self.advance_turn(); }
         self
     }
 
@@ -867,10 +857,9 @@ impl GameState for State {
 
     fn children<R: rand::prelude::Rng>(&self, _rng: &mut R) -> Vec<Self> {
         if self.done() { return vec![]; }
-        let Phase::Acting(ref stack) = self.phase;
         let current = self.current_player;
 
-        match stack.last().expect("phase stack is empty") {
+        match self.pending.last().expect("pending stack is empty") {
             SubAction::SelectActionSpace => {
                 let mut children = vec![];
                 for &space in &ActionSpace::ALL {
@@ -1004,7 +993,7 @@ impl GameState for State {
                         if sub_stack.is_empty() {
                             c = c.advance_turn();
                         } else {
-                            c.phase = Phase::Acting(sub_stack);
+                            c.pending = sub_stack;
                         }
                         children.push(c);
                     }
@@ -1014,7 +1003,7 @@ impl GameState for State {
 
             SubAction::PlaceTile { space, tile } => {
                 let space = *space;
-                let tile = tile.clone();
+                let tile = tile.clone(); // clone before borrowing self for placements
                 let placements = self.players[current].tile_placements(tile.clone());
                 if placements.is_empty() {
                     return vec![self.clone().pop_subaction()];
@@ -1055,10 +1044,7 @@ impl GameState for State {
                 else { opts.into_iter().map(|c| c.pop_subaction()).collect() }
             }
 
-            SubAction::ExpeditionPick { space, picks_remaining, used_items } => {
-                let space = *space;
-                let picks_remaining = *picks_remaining;
-                let used_items = *used_items;
+            &SubAction::ExpeditionPick { space, picks_remaining, used_items } => {
                 let weapon = self.players[current].dwarfs.iter()
                     .find(|d| d.placed_on == Some(space))
                     .map(|d| d.weapon).unwrap_or(0);
@@ -1066,13 +1052,11 @@ impl GameState for State {
                     .into_iter()
                     .map(|(state, item_bit, needs_furnish)| {
                         let mut c = state;
-                        { let Phase::Acting(ref mut s) = c.phase; s.pop(); }
+                        c.pending.pop();
                         if picks_remaining > 1 {
-                            let Phase::Acting(ref mut s) = c.phase;
-                            s.push(SubAction::ExpeditionPick { space, picks_remaining: picks_remaining - 1, used_items: used_items | item_bit });
+                            c.pending.push(SubAction::ExpeditionPick { space, picks_remaining: picks_remaining - 1, used_items: used_items | item_bit });
                         } else {
-                            // Last pick of this expedition: upgrade weapon if no more for this space
-                            let has_more = { let Phase::Acting(ref s) = c.phase; s.iter().any(|a| matches!(a, SubAction::ExpeditionPick { space: s2, .. } if *s2 == space)) };
+                            let has_more = c.pending.iter().any(|a| matches!(a, SubAction::ExpeditionPick { space: s2, .. } if *s2 == space));
                             if !has_more {
                                 if let Some(d) = c.players[current].dwarfs.iter_mut().find(|d| d.placed_on == Some(space)) {
                                     if d.weapon > 0 { d.weapon = d.weapon.saturating_add(1); }
@@ -1080,9 +1064,9 @@ impl GameState for State {
                             }
                         }
                         if needs_furnish && !c.furnish_cave_options(current).is_empty() {
-                            let Phase::Acting(ref mut s) = c.phase; s.push(SubAction::Furnish);
+                            c.pending.push(SubAction::Furnish);
                         }
-                        { let Phase::Acting(ref s) = c.phase; if s.is_empty() { return c.advance_turn(); } }
+                        if c.pending.is_empty() { return c.advance_turn(); }
                         c
                     })
                     .collect()
