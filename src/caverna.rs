@@ -541,6 +541,15 @@ impl Player {
         self.animals = self.trim_animals(bred);
     }
 
+    // Places the dwarf with lowest weapon on the given action space.
+    pub(crate) fn place_dwarf(&mut self, space: ActionSpace) {
+        self.dwarfs.iter_mut()
+            .filter(|d| d.placed_on.is_none())
+            .min_by_key(|d| d.weapon)
+            .expect("no unplaced dwarf")
+            .placed_on = Some(space);
+    }
+
 }
 
 #[derive(Clone)]
@@ -877,11 +886,7 @@ impl GameState for State {
 
                     // Place dwarf and apply immediate gains
                     let mut base = self.clone();
-                    base.players[current].dwarfs.iter_mut()
-                        .filter(|d| d.placed_on.is_none())
-                        .min_by_key(|d| d.weapon)
-                        .expect("no unplaced dwarf")
-                        .placed_on = Some(space);
+                    base.players[current].place_dwarf(space);
                     space.gain_resources(base.accumulated[space as usize], &mut base.players[current].resources);
                     space.gain_animals(base.accumulated[space as usize], &mut base.players[current].animals);
                     if space == ActionSpace::StartingPlayer { base.starting_player = current as u8; }
