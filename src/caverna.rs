@@ -53,6 +53,25 @@ impl ActionSpace {
         ActionSpace::Adventure,
     ];
 
+    fn apply_gains(self, accumulated: u32, player: &mut Player) {
+        self.gain_resources(accumulated, &mut player.resources);
+        self.gain_animals(accumulated, &mut player.animals);
+        if matches!(self, ActionSpace::OreMining | ActionSpace::OreDelivery) {
+            let mines = player.indoor.iter().flatten().filter(|&&t| t == Tile::OreMine).count();
+            player.resources.coal += mines * 2;
+        }
+        if self == ActionSpace::RubyMining {
+            if player.indoor.iter().flatten().any(|&t| t == Tile::RubyMine) {
+                player.resources.rubies += 1;
+            }
+        }
+        if self == ActionSpace::RubyDelivery {
+            let mines = player.indoor.iter().flatten().filter(|&&t| t == Tile::RubyMine).count();
+            if mines >= 2 { player.resources.rubies += 1; }
+        }
+        if self == ActionSpace::Housework { player.dogs += 1; }
+    }
+
     fn gain_resources(self, rounds: u32, resources: &mut Resources) {
         let r = rounds as usize;
         match self {
@@ -884,26 +903,10 @@ impl GameState for State {
                         .any(|p| p.dwarfs.iter().any(|d| d.placed_on == Some(space)));
                     if occupied { continue; }
 
-                    // Place dwarf and apply immediate gains
                     let mut base = self.clone();
                     base.players[current].place_dwarf(space);
-                    space.gain_resources(base.accumulated[space as usize], &mut base.players[current].resources);
-                    space.gain_animals(base.accumulated[space as usize], &mut base.players[current].animals);
+                    space.apply_gains(base.accumulated[space as usize], &mut base.players[current]);
                     if space == ActionSpace::StartingPlayer { base.starting_player = current as u8; }
-                    if matches!(space, ActionSpace::OreMining | ActionSpace::OreDelivery) {
-                        let mines = base.players[current].indoor.iter().flatten().filter(|&&t| t == Tile::OreMine).count();
-                        base.players[current].resources.coal += mines * 2;
-                    }
-                    if space == ActionSpace::RubyMining {
-                        if base.players[current].indoor.iter().flatten().any(|&t| t == Tile::RubyMine) {
-                            base.players[current].resources.rubies += 1;
-                        }
-                    }
-                    if space == ActionSpace::RubyDelivery {
-                        let mines = base.players[current].indoor.iter().flatten().filter(|&&t| t == Tile::RubyMine).count();
-                        if mines >= 2 { base.players[current].resources.rubies += 1; }
-                    }
-                    if space == ActionSpace::Housework { base.players[current].dogs += 1; }
 
                     // Build (state, sub_stack) candidates; stack vec: last = current (first to execute)
                     let mut candidates: Vec<(Self, Vec<SubAction>)> = match space {
