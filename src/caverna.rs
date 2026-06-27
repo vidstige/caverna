@@ -670,6 +670,8 @@ pub(crate) enum SubAction {
     Furnish,
     Sow,
     ExpeditionPick { space: ActionSpace, picks_remaining: usize, used_items: u16 },
+    TradeFood { player_idx: usize },
+    FinishRound,
 }
 
 #[derive(Clone)]
@@ -722,14 +724,6 @@ impl State {
             }
         }
     }
-    fn harvest(&mut self) {
-        for player in &mut self.players {
-            player.harvest();
-            player.feed();
-            player.breed();
-        }
-    }
-
     fn grow_children(&mut self) {
         for player in &mut self.players {
             player.grow_children();
@@ -750,11 +744,17 @@ impl State {
     fn advance_round(mut self) -> Self {
         self.replenish();
         self.return_dwarfs();
-        self.harvest();
-        self.grow_children();
-        self.round += 1;
-        self.current_player = self.starting_player as usize;
-        self.pending = vec![SubAction::SelectActionSpace];
+        for player in &mut self.players {
+            player.harvest();
+        }
+        // Trading phase: each player may trade resources for food, then FinishRound feeds and breeds.
+        let n = self.players.len();
+        let mut pending = vec![SubAction::FinishRound];
+        for i in (0..n).rev() {
+            pending.push(SubAction::TradeFood { player_idx: i });
+        }
+        self.pending = pending;
+        self.current_player = 0;
         self
     }
 
@@ -1110,6 +1110,106 @@ impl GameState for State {
                         c
                     })
                     .collect()
+            }
+
+            SubAction::TradeFood { player_idx } => {
+                let player_idx = *player_idx;
+                let food_needed = self.players[player_idx].food_needed();
+                let food_have = self.players[player_idx].resources.food;
+                let food_gap = food_needed.saturating_sub(food_have);
+
+                let sheep  = self.players[player_idx].animals[AnimalType::Sheep  as usize];
+                let boar   = self.players[player_idx].animals[AnimalType::Boar   as usize];
+                let cow    = self.players[player_idx].animals[AnimalType::Cow    as usize];
+                let donkey = self.players[player_idx].animals[AnimalType::Donkey as usize];
+                let wheat  = self.players[player_idx].resources.wheat;
+                let veg    = self.players[player_idx].resources.vegetables;
+                let rubies = self.players[player_idx].resources.rubies;
+
+                let mut children = vec![];
+
+                // "Pass" — done trading; advance to next trader or FinishRound
+                let mut done = self.clone();
+                done.pending.pop();
+                if let Some(SubAction::TradeFood { player_idx: next }) = done.pending.last() {
+                    done.current_player = *next;
+                }
+                children.push(done);
+
+                if food_gap > 0 {
+                    // 1 sheep → 1 food
+                    for n in 1..=sheep.min(food_gap) {
+                        let mut c = self.clone();
+                        c.players[player_idx].animals[AnimalType::Sheep as usize] -= n;
+                        c.players[player_idx].resources.food += n;
+                        children.push(c);
+                    }
+                    // 1 boar → 2 food
+                    for n in 1..=boar.min((food_gap + 1) / 2) {
+                        let mut c = self.clone();
+                        c.players[player_idx].animals[AnimalType::Boar as usize] -= n;
+                        c.players[player_idx].resources.food += n * 2;
+                        children.push(c);
+                    }
+                    // 1 cow → 3 food
+                    for n in 1..=cow.min((food_gap + 2) / 3) {
+                        let mut c = self.clone();
+                        c.players[player_idx].animals[AnimalType::Cow as usize] -= n;
+                        c.players[player_idx].resources.food += n * 3;
+                        children.push(c);
+                    }
+                    // 1 donkey → 1 food (only when a pair trade isn't possible)
+                    if donkey == 1 {
+                        let mut c = self.clone();
+                        c.players[player_idx].animals[AnimalType::Donkey as usize] -= 1;
+                        c.players[player_idx].resources.food += 1;
+                        children.push(c);
+                    }
+                    // 2 donkeys → 3 food
+                    for n in 1..=(donkey / 2).min((food_gap + 2) / 3) {
+                        let mut c = self.clone();
+                        c.players[player_idx].animals[AnimalType::Donkey as usize] -= n * 2;
+                        c.players[player_idx].resources.food += n * 3;
+                        children.push(c);
+                    }
+                    // 1 wheat → 1 food
+                    for n in 1..=wheat.min(food_gap) {
+                        let mut c = self.clone();
+                        c.players[player_idx].resources.wheat -= n;
+                        c.players[player_idx].resources.food += n;
+                        children.push(c);
+                    }
+                    // 1 vegetable → 2 food
+                    for n in 1..=veg.min((food_gap + 1) / 2) {
+                        let mut c = self.clone();
+                        c.players[player_idx].resources.vegetables -= n;
+                        c.players[player_idx].resources.food += n * 2;
+                        children.push(c);
+                    }
+                    // 1 ruby → 2 food
+                    for n in 1..=rubies.min((food_gap + 1) / 2) {
+                        let mut c = self.clone();
+                        c.players[player_idx].resources.rubies -= n;
+                        c.players[player_idx].resources.food += n * 2;
+                        children.push(c);
+                    }
+                }
+
+                children
+            }
+
+            SubAction::FinishRound => {
+                let mut c = self.clone();
+                c.pending.pop();
+                for player in &mut c.players {
+                    player.feed();
+                    player.breed();
+                }
+                c.grow_children();
+                c.round += 1;
+                c.current_player = c.starting_player as usize;
+                c.pending = vec![SubAction::SelectActionSpace];
+                vec![c]
             }
         }
     }
