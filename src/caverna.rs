@@ -747,25 +747,28 @@ impl State {
         None
     }
 
-    fn advance_turn(mut self) -> Self {
-        match self.next_placement_player() {
-            Some(p) => { self.current_player = p; }
-            None => {
-                self.replenish();
-                self.return_dwarfs();
-                self.harvest();
-                self.grow_children();
-                self.round += 1;
-                self.current_player = self.starting_player as usize;
-            }
-        }
+    fn advance_round(mut self) -> Self {
+        self.replenish();
+        self.return_dwarfs();
+        self.harvest();
+        self.grow_children();
+        self.round += 1;
+        self.current_player = self.starting_player as usize;
         self.pending = vec![SubAction::SelectActionSpace];
         self
     }
 
+    fn is_round_over(&self) -> bool {
+        self.players[self.current_player].dwarfs.iter().all(|d| d.placed_on.is_some())
+    }
+
     fn pop_subaction(mut self) -> Self {
         self.pending.pop();
-        if self.pending.is_empty() { return self.advance_turn(); }
+        if self.pending.is_empty() {
+            self.current_player = self.next_placement_player()
+                .unwrap_or(self.starting_player as usize);
+            self.pending = vec![SubAction::SelectActionSpace];
+        }
         self
     }
 
@@ -986,6 +989,13 @@ impl GameState for State {
 
         match self.pending.last().expect("pending stack is empty") {
             SubAction::SelectActionSpace => {
+                // Current player has no dwarfs to place — finish the round now.
+                // Deferred from pop_subaction() so this round-boundary state is a distinct node,
+                // separating action gains from end-of-round effects like harvest and begging.
+                if self.is_round_over() {
+                    return vec![self.clone().advance_round()];
+                }
+
                 let mut children = vec![];
                 for &space in &ActionSpace::ALL {
                     if !self.space_available(space) { continue; }
@@ -1015,7 +1025,7 @@ impl GameState for State {
 
                     for (mut c, sub_stack) in candidates {
                         if sub_stack.is_empty() {
-                            c = c.advance_turn();
+                            c = c.pop_subaction();
                         } else {
                             c.pending = sub_stack;
                         }
@@ -1096,7 +1106,7 @@ impl GameState for State {
                         if needs_furnish && !c.furnish_cave_options(current).is_empty() {
                             c.pending.push(SubAction::Furnish);
                         }
-                        if c.pending.is_empty() { return c.advance_turn(); }
+                        if c.pending.is_empty() { return c.pop_subaction(); }
                         c
                     })
                     .collect()
