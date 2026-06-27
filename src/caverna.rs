@@ -1008,6 +1008,11 @@ impl GameState for State {
                         test.has_children()
                     });
 
+                    // Tile placement is technically optional, but if any candidate includes one
+                    // we trim those that don't — pruning rarely-optimal moves for a shallower tree.
+                    let has_tile = candidates.iter().any(|(_, s)| s.iter().any(|a| matches!(a, SubAction::PlaceTile(_))));
+                    if has_tile { candidates.retain(|(_, s)| s.iter().any(|a| matches!(a, SubAction::PlaceTile(_)))); }
+
                     for (mut c, sub_stack) in candidates {
                         if sub_stack.is_empty() {
                             c = c.advance_turn();
