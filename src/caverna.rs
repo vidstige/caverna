@@ -670,7 +670,7 @@ pub(crate) enum SubAction {
     Furnish,
     Sow,
     ExpeditionPick { space: ActionSpace, picks_remaining: usize, used_items: u16 },
-    TradeFood { player_idx: usize },
+    TradeFood,
     FinishRound,
 }
 
@@ -750,8 +750,8 @@ impl State {
         // Trading phase: each player may trade resources for food, then FinishRound feeds and breeds.
         let n = self.players.len();
         let mut pending = vec![SubAction::FinishRound];
-        for i in (0..n).rev() {
-            pending.push(SubAction::TradeFood { player_idx: i });
+        for _ in 0..n {
+            pending.push(SubAction::TradeFood);
         }
         self.pending = pending;
         self.current_player = 0;
@@ -1112,8 +1112,8 @@ impl GameState for State {
                     .collect()
             }
 
-            SubAction::TradeFood { player_idx } => {
-                let player_idx = *player_idx;
+            SubAction::TradeFood => {
+                let player_idx = current;
                 let food_needed = self.players[player_idx].food_needed();
                 let food_have = self.players[player_idx].resources.food;
                 let food_gap = food_needed.saturating_sub(food_have);
@@ -1128,11 +1128,11 @@ impl GameState for State {
 
                 let mut children = vec![];
 
-                // "Pass" — done trading; advance to next trader or FinishRound
+                // "Pass" — done trading; advance current_player for the next TradeFood
                 let mut done = self.clone();
                 done.pending.pop();
-                if let Some(SubAction::TradeFood { player_idx: next }) = done.pending.last() {
-                    done.current_player = *next;
+                if matches!(done.pending.last(), Some(SubAction::TradeFood)) {
+                    done.current_player += 1;
                 }
                 children.push(done);
 
