@@ -489,8 +489,12 @@ impl Player {
         player
     }
 
-    pub fn food_needed(&self) -> usize {
-        self.dwarfs.len() * 2 + self.children
+    pub fn food_cost(&self, round: u32) -> usize {
+        match round {
+            0 | 1 => 0,
+            3 => self.dwarfs.len() + self.children,
+            _ => self.dwarfs.len() * 2 + self.children,
+        }
     }
 
     pub fn dwellings_needed(&self) -> usize {
@@ -623,8 +627,8 @@ impl Player {
             .count()
     }
 
-    fn feed(&mut self) {
-        let needed = self.food_needed();
+    fn feed(&mut self, round: u32) {
+        let needed = self.food_cost(round);
         if self.resources.food >= needed {
             self.resources.food -= needed;
         } else {
@@ -747,11 +751,17 @@ impl State {
         None
     }
 
+    pub fn is_harvest(&self) -> bool {
+        self.round == 2 || self.round >= 4
+    }
+
     fn advance_round(mut self) -> Self {
         self.replenish();
         self.return_dwarfs();
-        for player in &mut self.players {
-            player.harvest();
+        if self.is_harvest() {
+            for player in &mut self.players {
+                player.harvest();
+            }
         }
         // Trading phase: each player may trade resources for food, then FinishRound feeds and breeds.
         let n = self.players.len();
@@ -1130,7 +1140,7 @@ impl GameState for State {
 
             SubAction::TradeFood => {
                 let player_idx = current;
-                let food_needed = self.players[player_idx].food_needed();
+                let food_needed = self.players[player_idx].food_cost(self.round);
                 let food_have = self.players[player_idx].resources.food;
                 let food_gap = food_needed.saturating_sub(food_have);
 
@@ -1217,9 +1227,10 @@ impl GameState for State {
             SubAction::FinishRound => {
                 let mut c = self.clone();
                 c.pending.pop();
+                let is_harvest = c.is_harvest();
                 for player in &mut c.players {
-                    player.feed();
-                    player.breed();
+                    player.feed(c.round);
+                    if is_harvest { player.breed(); }
                 }
                 c.grow_children();
                 c.round += 1;
