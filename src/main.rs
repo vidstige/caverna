@@ -127,7 +127,7 @@ fn describe_move(state: &State, next: &State) -> String {
         Some(SubAction::Sow)                    => format!("sow{}", gains),
         Some(SubAction::ChooseTile(_))          => format!("choose tile{}", gains),
         Some(SubAction::TradeFood)              => format!("trade food{}", gains),
-        Some(SubAction::FinishRound)            => format!("finish round{}", gains),
+        Some(SubAction::FinishRound)            => unreachable!("finish round is handled in the main loop"),
         None => "?".to_string(),
     }
 }
@@ -232,6 +232,7 @@ fn main() {
         };
         let is_advance_round = matches!(state.pending.last(), Some(SubAction::SelectActionSpace))
             && state.players[current].dwarfs.iter().all(|d| d.placed_on.is_some());
+        let is_finish_round = matches!(state.pending.last(), Some(SubAction::FinishRound));
         if is_advance_round {
             let parts: Vec<String> = names.iter().zip(state.players.iter()).zip(next.players.iter())
                 .map(|((name, old), new)| {
@@ -244,6 +245,18 @@ fn main() {
                 })
                 .collect();
             println!("  harvest: {}", parts.join(", "));
+        } else if is_finish_round {
+            let parts: Vec<String> = names.iter().zip(state.players.iter()).zip(next.players.iter())
+                .map(|((name, old), new)| {
+                    let food = new.resources.food as i64 - old.resources.food as i64;
+                    let begging = new.resources.begging as i64 - old.resources.begging as i64;
+                    let mut p = vec![];
+                    if food != 0 { p.push(format!("{} food", food)); }
+                    if begging > 0 { p.push(format!("+{} begging", begging)); }
+                    if p.is_empty() { format!("{} -0", name) } else { format!("{} {}", name, p.join(", ")) }
+                })
+                .collect();
+            println!("  feed: {}", parts.join(", "));
         } else {
             println!("  {}: {}", names[current], describe_move(&state, &next));
             print_player_state(&next.players[current]);
