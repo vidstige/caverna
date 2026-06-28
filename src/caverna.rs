@@ -75,10 +75,8 @@ impl ActionSpace {
     // Returns (state, sub_stack) candidates after the dwarf has been placed and gains applied.
     // stack vec: last element = current sub-action (first to execute).
     fn sub_actions(self, base: State, current: usize) -> Vec<(State, Vec<SubAction>)> {
+        let tile = self.tile_subaction();
         match self {
-            ActionSpace::Excavation => vec![
-                (base, vec![self.tile_subaction().unwrap()]),
-            ],
             ActionSpace::Blacksmithing =>
                 base.forge_options(current, self).into_iter()
                     .map(|c| (c, vec![SubAction::ExpeditionPick { space: self, picks_remaining: 3, used_items: 0 }]))
@@ -128,24 +126,19 @@ impl ActionSpace {
             ActionSpace::OreMineConstruction => {
                 let exp = SubAction::ExpeditionPick { space: self, picks_remaining: 1, used_items: 0 };
                 vec![
-                    (base.clone(), vec![exp.clone(), self.tile_subaction().unwrap()]),
+                    (base.clone(), vec![exp.clone(), tile.unwrap()]),
                     (base, vec![exp]),
                 ]
             }
             ActionSpace::SlashAndBurn => {
-                let tile_sa = self.tile_subaction().unwrap();
+                let tile_sa = tile.unwrap();
                 vec![
                     (base.clone(), vec![SubAction::Sow, tile_sa.clone()]),
                     (base.clone(), vec![tile_sa]),
                     (base, vec![SubAction::Sow]),
                 ]
             }
-            ActionSpace::DriftMining | ActionSpace::Clearing | ActionSpace::Sustenance
-            | ActionSpace::RubyMineConstruction => vec![
-                (base.clone(), vec![self.tile_subaction().unwrap()]),
-                (base, vec![]),
-            ],
-            _ => vec![(base, vec![])],
+            _ => vec![(base, tile.into_iter().collect())],
         }
     }
 
