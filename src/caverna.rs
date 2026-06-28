@@ -77,9 +77,7 @@ impl ActionSpace {
     fn sub_actions(self, base: State, current: usize) -> Vec<(State, Vec<SubAction>)> {
         match self {
             ActionSpace::Excavation => vec![
-                (base.clone(), vec![SubAction::PlaceTile(TileGroup::Twin((Tile::Tunnel, Tile::Cave)))]),
-                (base.clone(), vec![SubAction::PlaceTile(TileGroup::Twin((Tile::Cave, Tile::Cave)))]),
-                (base, vec![]),
+                (base, vec![SubAction::ChooseTile(ActionSpace::Excavation)]),
             ],
             ActionSpace::Blacksmithing =>
                 base.forge_options(current, self).into_iter()
@@ -159,6 +157,16 @@ impl ActionSpace {
                 (base, vec![]),
             ],
             _ => vec![(base, vec![])],
+        }
+    }
+
+    fn tile_choices(self) -> Vec<TileGroup> {
+        match self {
+            ActionSpace::Excavation => vec![
+                TileGroup::Twin((Tile::Tunnel, Tile::Cave)),
+                TileGroup::Twin((Tile::Cave, Tile::Cave)),
+            ],
+            _ => vec![],
         }
     }
 
@@ -664,6 +672,7 @@ impl Player {
 #[derive(Clone)]
 pub(crate) enum SubAction {
     SelectActionSpace,
+    ChooseTile(ActionSpace),
     PlaceTile(TileGroup),
     Pasture,
     Stable,
@@ -1033,6 +1042,16 @@ impl GameState for State {
                     }
                 }
                 children
+            }
+
+            SubAction::ChooseTile(space) => {
+                space.tile_choices().into_iter()
+                    .map(|tile| {
+                        let mut c = self.clone();
+                        *c.pending.last_mut().unwrap() = SubAction::PlaceTile(tile);
+                        c
+                    })
+                    .collect()
             }
 
             SubAction::PlaceTile(tile) => {

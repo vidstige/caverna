@@ -123,6 +123,7 @@ fn describe_move(state: &State, next: &State) -> String {
         Some(SubAction::Stable)            => format!("stable{}", gains),
         Some(SubAction::Furnish)           => format!("furnish{}", gains),
         Some(SubAction::Sow)                    => format!("sow{}", gains),
+        Some(SubAction::ChooseTile(_))          => format!("choose tile{}", gains),
         Some(SubAction::TradeFood)              => format!("trade food{}", gains),
         Some(SubAction::FinishRound)            => format!("finish round{}", gains),
         None => "?".to_string(),
