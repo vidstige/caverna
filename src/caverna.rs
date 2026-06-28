@@ -77,7 +77,7 @@ impl ActionSpace {
     fn sub_actions(self, base: State, current: usize) -> Vec<(State, Vec<SubAction>)> {
         match self {
             ActionSpace::Excavation => vec![
-                (base, vec![SubAction::ChooseTile(ActionSpace::Excavation)]),
+                (base, vec![self.tile_subaction().unwrap()]),
             ],
             ActionSpace::Blacksmithing =>
                 base.forge_options(current, self).into_iter()
@@ -126,34 +126,23 @@ impl ActionSpace {
             ActionSpace::Logging =>
                 vec![(base, vec![SubAction::ExpeditionPick { space: self, picks_remaining: 1, used_items: 0 }])],
             ActionSpace::OreMineConstruction => {
-                let tile = TileGroup::Twin((Tile::DeepTunnel, Tile::OreMine));
                 let exp = SubAction::ExpeditionPick { space: self, picks_remaining: 1, used_items: 0 };
                 vec![
-                    (base.clone(), vec![exp.clone(), SubAction::PlaceTile(tile)]),
+                    (base.clone(), vec![exp.clone(), self.tile_subaction().unwrap()]),
                     (base, vec![exp]),
                 ]
             }
             ActionSpace::SlashAndBurn => {
-                let tile = TileGroup::Twin((Tile::Meadow, Tile::Field((0, 0))));
+                let tile_sa = self.tile_subaction().unwrap();
                 vec![
-                    (base.clone(), vec![SubAction::Sow, SubAction::PlaceTile(tile.clone())]),
-                    (base.clone(), vec![SubAction::PlaceTile(tile)]),
+                    (base.clone(), vec![SubAction::Sow, tile_sa.clone()]),
+                    (base.clone(), vec![tile_sa]),
                     (base, vec![SubAction::Sow]),
                 ]
             }
-            ActionSpace::DriftMining => vec![
-                (base.clone(), vec![SubAction::PlaceTile(TileGroup::Twin((Tile::Tunnel, Tile::Cave)))]),
-                (base, vec![]),
-            ],
-            ActionSpace::Clearing | ActionSpace::Sustenance => {
-                let tile = TileGroup::Twin((Tile::Meadow, Tile::Field((0, 0))));
-                vec![
-                    (base.clone(), vec![SubAction::PlaceTile(tile)]),
-                    (base, vec![]),
-                ]
-            }
-            ActionSpace::RubyMineConstruction => vec![
-                (base.clone(), vec![SubAction::PlaceTile(TileGroup::Single(Tile::RubyMine))]),
+            ActionSpace::DriftMining | ActionSpace::Clearing | ActionSpace::Sustenance
+            | ActionSpace::RubyMineConstruction => vec![
+                (base.clone(), vec![self.tile_subaction().unwrap()]),
                 (base, vec![]),
             ],
             _ => vec![(base, vec![])],
@@ -166,7 +155,28 @@ impl ActionSpace {
                 TileGroup::Twin((Tile::Tunnel, Tile::Cave)),
                 TileGroup::Twin((Tile::Cave, Tile::Cave)),
             ],
+            ActionSpace::DriftMining => vec![
+                TileGroup::Twin((Tile::Tunnel, Tile::Cave)),
+            ],
+            ActionSpace::SlashAndBurn | ActionSpace::Clearing | ActionSpace::Sustenance => vec![
+                TileGroup::Twin((Tile::Meadow, Tile::Field((0, 0)))),
+            ],
+            ActionSpace::OreMineConstruction => vec![
+                TileGroup::Twin((Tile::DeepTunnel, Tile::OreMine)),
+            ],
+            ActionSpace::RubyMineConstruction => vec![
+                TileGroup::Single(Tile::RubyMine),
+            ],
             _ => vec![],
+        }
+    }
+
+    fn tile_subaction(self) -> Option<SubAction> {
+        let mut choices = self.tile_choices();
+        match choices.len() {
+            0 => None,
+            1 => Some(SubAction::PlaceTile(choices.remove(0))),
+            _ => Some(SubAction::ChooseTile(self)),
         }
     }
 
