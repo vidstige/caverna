@@ -130,14 +130,8 @@ impl ActionSpace {
                     (base, vec![exp]),
                 ]
             }
-            ActionSpace::SlashAndBurn => {
-                let tile_sa = tile.unwrap();
-                vec![
-                    (base.clone(), vec![SubAction::Sow, tile_sa.clone()]),
-                    (base.clone(), vec![tile_sa]),
-                    (base, vec![SubAction::Sow]),
-                ]
-            }
+            ActionSpace::SlashAndBurn =>
+                vec![(base, vec![SubAction::Sow, tile.unwrap()])],
             _ => vec![(base, tile.into_iter().collect())],
         }
     }
