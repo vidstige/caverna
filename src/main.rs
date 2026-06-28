@@ -111,8 +111,10 @@ fn describe_move(state: &State, next: &State) -> String {
                 .find_map(|(nd, od)| {
                     if nd.placed_on.is_some() && od.placed_on.is_none() { nd.placed_on } else { None }
                 });
-            let space_str = space.map_or("?".to_string(), |s| format!("{}", s));
-            format!("{}{}", space_str, gains)
+            match space {
+                Some(s) => format!("{}{}", s, gains),
+                None => unreachable!("advance round is handled in the main loop"),
+            }
         }
         Some(SubAction::ExpeditionPick { .. }) => {
             if parts.is_empty() { "expedition pass".to_string() }
@@ -228,10 +230,26 @@ fn main() {
         } else {
             random_move(&state, &mut rng)
         };
-        println!("  {}: {}", names[current], describe_move(&state, &next));
-        print_player_state(&next.players[current]);
-        if verbose {
-            print_options(&state, &next, &mut rng);
+        let is_advance_round = matches!(state.pending.last(), Some(SubAction::SelectActionSpace))
+            && state.players[current].dwarfs.iter().all(|d| d.placed_on.is_some());
+        if is_advance_round {
+            let parts: Vec<String> = names.iter().zip(state.players.iter()).zip(next.players.iter())
+                .map(|((name, old), new)| {
+                    let wheat = new.resources.wheat as i64 - old.resources.wheat as i64;
+                    let veg = new.resources.vegetables as i64 - old.resources.vegetables as i64;
+                    let mut crops = vec![];
+                    if wheat > 0 { crops.push(format!("+{} wheat", wheat)); }
+                    if veg > 0 { crops.push(format!("+{} veg", veg)); }
+                    if crops.is_empty() { format!("{} +0", name) } else { format!("{} {}", name, crops.join(", ")) }
+                })
+                .collect();
+            println!("  harvest: {}", parts.join(", "));
+        } else {
+            println!("  {}: {}", names[current], describe_move(&state, &next));
+            print_player_state(&next.players[current]);
+            if verbose {
+                print_options(&state, &next, &mut rng);
+            }
         }
         state = next;
     }
